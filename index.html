@@ -164,6 +164,22 @@ footer b{color:var(--ink-2)}
 .peta-grid select{font-size:12.5px;padding:6px 8px}
 .peta-grid .opsi{font-weight:500;color:var(--muted);font-size:11px}
 hr.pisah{border:none;border-top:1px solid var(--line-2);margin:16px 0 14px}
+
+/* ---- tampilan penonton: peta menempel, fokus teknisi & outlet ---- */
+.layout.solo .peta-wrap{position:sticky;top:0;z-index:5;background:var(--paper);padding:8px 0 6px;margin-top:-8px}
+.layout.solo #map{height:clamp(240px,44vh,520px)}
+.petunjuk{font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px}
+.layout.solo .route{cursor:pointer;transition:box-shadow .15s,opacity .15s}
+.layout.solo .route:hover{box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+.layout.solo ol.stops li{cursor:pointer}
+ol.stops li.aktif{background:var(--accent-soft)}
+.routes.fokus .route:not(.dipilih){display:none}
+.routes.fokus .route.dipilih{grid-column:1/-1;cursor:default}
+.routes.fokus .route.dipilih ol.stops{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));padding:0}
+.routes.fokus .route.dipilih ol.stops li{border-bottom:1px solid var(--line-2);border-right:1px solid var(--line-2);padding:8px 11px}
+.routes.fokus .route.dipilih ol.stops .t3,.routes.fokus .route.dipilih ol.stops .t4{font-size:11.5px}
+.pin.redup{opacity:.45;box-shadow:none}
+.pin.sorot{transform:scale(1.35);box-shadow:0 0 0 5px rgba(14,107,90,.35),0 2px 6px rgba(0,0,0,.45)}
 </style>
 
 </head>
@@ -343,7 +359,10 @@ hr.pisah{border:none;border-top:1px solid var(--line-2);margin:16px 0 14px}
     <div>
       <div id="msg"></div>
       <div id="msgAdapt"></div>
-      <div id="map"></div>
+      <div class="peta-wrap">
+        <div id="map"></div>
+        <div class="petunjuk hidden" id="petunjuk"></div>
+      </div>
       <div class="stats" id="stats"></div>
       <div class="routes" id="routes"></div>
     </div>
@@ -737,7 +756,10 @@ function measure(){
 }
 
 /* ---------- peta ---------- */
-let MAP=null, LAYER=null;
+let MAP=null, LAYER=null, PENANDA={};
+/* Fokus tampilan penonton: ri = teknisi yang dipilih, key = outlet yang disorot. */
+const FOKUS={ri:null,key:null};
+const ABU="#9AA5A0";
 function siapkanPeta(){
   if(MAP){ MAP.invalidateSize(); return; }
   MAP=L.map("map",{zoomControl:true,scrollWheelZoom:true}).setView([-6.2745,106.8220],12);
@@ -745,28 +767,84 @@ function siapkanPeta(){
     maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(MAP);
   LAYER=L.layerGroup().addTo(MAP);
+  // Ketuk peta (bukan geser) = kembali satu langkah, hanya di tampilan penonton.
+  MAP.on("click",function(){ if(!ADMIN) kembali(); });
 }
-function gambarPeta(){
+function gambarPeta(tanpaFit){
   if(!MAP) return;
-  LAYER.clearLayers();
-  const semua=[];
-  ROUTES.forEach(function(r){
+  LAYER.clearLayers(); PENANDA={};
+  const semua=[], dipilih=[];
+  // Rute yang tidak dipilih digambar lebih dulu agar berada di bawah.
+  const urut=ROUTES.map((r,ri)=>ri).sort((a,b)=>(a===FOKUS.ri)-(b===FOKUS.ri));
+  urut.forEach(function(ri){
+    const r=ROUTES[ri], redup=FOKUS.ri!=null&&ri!==FOKUS.ri;
     if(r.seq.length>1){
-      L.polyline(r.seq.map(p=>[p.lat,p.lng]),{color:r.color,weight:4,opacity:.85}).addTo(LAYER);
+      L.polyline(r.seq.map(p=>[p.lat,p.lng]),redup?{color:ABU,weight:3,opacity:.35}:{color:r.color,weight:FOKUS.ri===ri?5:4,opacity:.9})
+        .addTo(LAYER);
     }
-    const E=etas(r.seq);
     r.seq.forEach(function(p,i){
-      semua.push([p.lat,p.lng]);
-      const ic=L.divIcon({className:"",html:'<div class="pin'+(p.urgent?" urg":"")+'" style="width:26px;height:26px;background:'+(p.urgent?"#A8432A":r.color)+'">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13]});
-      L.marker([p.lat,p.lng],{icon:ic}).addTo(LAYER)
+      semua.push([p.lat,p.lng]); if(!redup&&FOKUS.ri!=null) dipilih.push([p.lat,p.lng]);
+      const key=p.__key||(ri+"_"+i), sorot=FOKUS.key===key;
+      const warna=redup?ABU:(p.urgent?"#A8432A":r.color);
+      const ic=L.divIcon({className:"",html:'<div class="pin'+(p.urgent?" urg":"")+(redup?" redup":"")+(sorot?" sorot":"")+'" style="width:26px;height:26px;background:'+warna+'">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13]});
+      const m=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:sorot?1000:(redup?-500:0)}).addTo(LAYER)
        .bindPopup('<b>'+esc(p.nama)+'</b>'+
                   (rinci1(p).length?'<br>'+esc(rinci1(p).join(" · ")):'')+
                   (rinci2(p).length?'<br><span style="color:#75857D">'+esc(rinci2(p).join(", "))+'</span>':'')+
                   '<br>'+esc(r.nama)+' · perhentian '+(i+1)+
-                  '<br><a target="_blank" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">Buka di Google Maps</a>');
+                  (p.id&&p.id!=="URGENT"?' · WO '+esc(p.id):'')+
+                  '<br><a target="_blank" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">Buka di Google Maps</a>',{autoPan:true});
+      if(!ADMIN) m.on("click",function(){ fokusTitik(ri,key); });
+      PENANDA[key]={m:m,lat:p.lat,lng:p.lng};
     });
   });
-  if(semua.length) MAP.fitBounds(L.latLngBounds(semua).pad(.12));
+  if(tanpaFit) return;
+  const target=dipilih.length?dipilih:semua;
+  if(target.length) MAP.fitBounds(L.latLngBounds(target).pad(.12));
+}
+
+/* ---------- fokus tampilan penonton ---------- */
+function terapkanFokus(){
+  const box=el("routes");
+  box.classList.toggle("fokus",FOKUS.ri!=null);
+  box.querySelectorAll(".route").forEach(c=>c.classList.toggle("dipilih",+c.dataset.ri===FOKUS.ri));
+  box.querySelectorAll("li[data-key]").forEach(li=>li.classList.toggle("aktif",li.dataset.key===FOKUS.key));
+  el("petunjuk").textContent = FOKUS.key ? "Ketuk di mana saja untuk kembali."
+    : FOKUS.ri!=null ? "Ketuk outlet untuk melihatnya di peta · ketuk di mana saja untuk kembali."
+    : "Ketuk kartu teknisi untuk fokus · ketuk outlet untuk melihatnya di peta.";
+}
+function fokusTeknisi(ri){
+  FOKUS.ri=ri; FOKUS.key=null;
+  if(MAP) MAP.closePopup();
+  terapkanFokus(); gambarPeta();
+}
+function fokusTitik(ri,key){
+  FOKUS.key=key; FOKUS.dariSemua=(FOKUS.ri==null);
+  terapkanFokus(); gambarPeta(true);
+  const t=PENANDA[key];
+  if(t&&MAP){ MAP.setView([t.lat,t.lng],Math.max(MAP.getZoom(),16),{animate:true}); t.m.openPopup(); }
+}
+/* Kembali satu langkah: outlet → teknisi (atau tampilan awal) → tampilan awal. */
+function kembali(){
+  if(FOKUS.key!=null){ FOKUS.key=null; if(FOKUS.dariSemua) FOKUS.ri=null; }
+  else if(FOKUS.ri!=null){ FOKUS.ri=null; }
+  else return;
+  if(MAP) MAP.closePopup();
+  terapkanFokus(); gambarPeta();
+}
+function pasangFokus(){
+  document.addEventListener("click",function(e){
+    if(ADMIN||!ROUTES.length) return;
+    const t=e.target;
+    if(t.closest("#map")) return;                       // peta ditangani Leaflet (geser ≠ ketuk)
+    if(t.closest("a,button,input,select,label,form,header")) return;   // tautan & tombol tetap berfungsi
+    const li=t.closest("#routes li[data-key]");
+    if(li){ e.stopPropagation(); return fokusTitik(+li.dataset.ri,li.dataset.key); }
+    const kartu=t.closest("#routes .route");
+    if(kartu&&FOKUS.ri==null&&FOKUS.key==null) return fokusTeknisi(+kartu.dataset.ri);
+    kembali();
+  });
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape"&&!ADMIN) kembali(); });
 }
 
 /* ---------- tautan Google Maps ---------- */
@@ -869,7 +947,7 @@ function render(){
     const E=etas(r.seq);
     const li=r.seq.map(function(p,i){
       const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join(""):"";
-      return '<li><span class="no" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
+      return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
         '<span class="txt"><span class="t1">'+esc(p.nama)+(p.urgent?'<span class="badge">MENDESAK</span>':'')+'</span>'+
         rinciHtml(p)+
         (p.id&&p.id!=="URGENT"?'<span class="t2">WO '+esc(p.id)+'</span>':'')+'</span>'+
@@ -877,7 +955,7 @@ function render(){
         (ADMIN?'<select data-move="'+ri+'" data-stop="'+esc(p.__key)+'">'+opts+'</select>':'')+
         '</li>';
     }).join("");
-    return '<div class="route"><div class="rh"><i style="background:'+r.color+'"></i>'+
+    return '<div class="route" data-ri="'+ri+'"><div class="rh"><i style="background:'+r.color+'"></i>'+
       '<span class="nm">'+esc(r.nama)+'</span>'+
       (ADMIN?'<button class="ghost" data-reopt="'+ri+'">Optimalkan ulang</button>':'')+'</div>'+
       (ADMIN?'<div class="meta"><span><b>'+r.km.toFixed(1)+'</b> km</span><span><b>'+r.stops+'</b> outlet'+
@@ -1142,6 +1220,7 @@ function tampilSetup(){
   el("lede").textContent="Setup akun admin.";
 }
 function kosongkan(){
+  FOKUS.ri=null; FOKUS.key=null;
   ADMIN=false; KUNCI=""; ROUTES=[]; STOPS=[]; URGENT=null;
   ["msg","msgAdapt","stats","routes","uHasil","peta"].forEach(id=>{ if(el(id)) el(id).innerHTML=""; });
   if(LAYER) LAYER.clearLayers();
@@ -1157,8 +1236,10 @@ function masuk(peran,token,data){
   siapkanPeta();
   data=data||{};
   NAMA_TEK=(data.teknisi||["Teknisi 1","Teknisi 2","Teknisi 3"]).slice();
+  if(MAP){ if(ADMIN) MAP.scrollWheelZoom.enable(); else MAP.scrollWheelZoom.disable(); }
+  sembunyi("petunjuk",ADMIN);
   if(ADMIN) mulaiAdmin(data);
-  else tampilkanRencana(data.rencana);
+  else { tampilkanRencana(data.rencana); terapkanFokus(); }
   setTimeout(()=>{ if(MAP){ MAP.invalidateSize(); gambarPeta(); } },80);
 }
 function kirimForm(btn,labelProses,fn,args,msgId){
@@ -1273,7 +1354,7 @@ function mulaiAdmin(B){
 
 /* ---------- mulai ---------- */
 document.addEventListener("DOMContentLoaded",function(){
-  pasangLogin();
+  pasangLogin(); pasangFokus();
   if(window.BOOT) return mulai(window.BOOT);
   // Versi GitHub Pages: info awal diambil dari API.
   el("lede").textContent="Menghubungkan…";
