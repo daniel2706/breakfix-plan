@@ -180,6 +180,14 @@ ol.stops li.aktif{background:var(--accent-soft)}
 .routes.fokus .route.dipilih ol.stops .t3,.routes.fokus .route.dipilih ol.stops .t4{font-size:11.5px}
 .pin.redup{opacity:.45;box-shadow:none}
 .pin.sorot{transform:scale(1.35);box-shadow:0 0 0 5px rgba(14,107,90,.35),0 2px 6px rgba(0,0,0,.45)}
+
+/* ---- tombol tandai mendesak (admin) ---- */
+.tandai{width:24px;height:24px;padding:0;border-radius:50%;flex:none;font-weight:800;font-size:13px;line-height:1;
+  color:var(--muted);background:transparent;border:1.5px solid var(--line);display:inline-grid;place-items:center}
+.tandai:hover{border-color:var(--bad);color:var(--bad)}
+.tandai.on{background:var(--bad);border-color:var(--bad);color:#fff}
+.tandai.on:hover{filter:brightness(1.1);color:#fff}
+.tandai.contoh{width:18px;height:18px;font-size:11px;vertical-align:-3px;cursor:default}
 </style>
 
 </head>
@@ -314,6 +322,7 @@ ol.stops li.aktif{background:var(--accent-soft)}
           <div class="hint" style="margin-top:-6px;margin-bottom:11px">Isi waktu sekarang agar outlet hanya disisipkan pada perhentian yang belum dilewati.</div>
           <button class="primary" id="uCari" style="width:100%">Cari teknisi terdekat</button>
           <div id="uHasil"></div>
+          <div class="hint" style="margin-top:11px">Outlet yang sudah ada di rute juga bisa ditandai mendesak: tekan tombol <span class="tandai on contoh">!</span> di baris outletnya. Titik itu tampil <b>merah</b> dengan label MENDESAK bagi penonton setelah diterbitkan. Tekan lagi untuk menghapus tanda.</div>
         </div>
       </div>
 
@@ -952,7 +961,8 @@ function render(){
         rinciHtml(p)+
         (p.id&&p.id!=="URGENT"?'<span class="t2">WO '+esc(p.id)+'</span>':'')+'</span>'+
         '<a class="gmp" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">&#9906;</a>'+
-        (ADMIN?'<select data-move="'+ri+'" data-stop="'+esc(p.__key)+'">'+opts+'</select>':'')+
+        (ADMIN?'<button type="button" class="tandai'+(p.urgent?' on':'')+'" data-tandai="'+ri+'" data-stop="'+esc(p.__key)+'" title="'+(p.urgent?'Hapus tanda mendesak':'Tandai mendesak — tampil merah bagi penonton')+'" aria-pressed="'+(p.urgent?'true':'false')+'">!</button>'+
+          '<select data-move="'+ri+'" data-stop="'+esc(p.__key)+'">'+opts+'</select>':'')+
         '</li>';
     }).join("");
     return '<div class="route" data-ri="'+ri+'"><div class="rh"><i style="background:'+r.color+'"></i>'+
@@ -969,6 +979,13 @@ function render(){
   if(ADMIN){
     el("routes").querySelectorAll("[data-reopt]").forEach(b=>b.onclick=function(){
       const i=+b.dataset.reopt; ROUTES[i].seq=solve(ROUTES[i].seq); measure(); render();
+    });
+    // Tandai / hapus tanda mendesak: titik jadi merah di peta & kartu, ikut terbit ke penonton.
+    el("routes").querySelectorAll("[data-tandai]").forEach(b=>b.onclick=function(){
+      const p=ROUTES[+b.dataset.tandai].seq.find(x=>x.__key===b.dataset.stop);
+      if(!p) return;
+      p.urgent=!p.urgent;
+      render();
     });
     el("routes").querySelectorAll("[data-move]").forEach(sel=>sel.onchange=function(){
       const from=+sel.dataset.move, to=+sel.value, key=sel.dataset.stop;
