@@ -719,7 +719,7 @@ function cfg(){
   const v=(id,d)=>{ const e=el(id); if(!e) return d; const n=parseFloat(e.value); return isFinite(n)?n:d; };
   return {
     k: teknisiEfektif().dipakai,
-    mulai: el("mulai")?el("mulai").value||"08:00":"08:00",
+    mulai: jamMulai(),
     servis: v("servis",45), speed: Math.max(1,v("speed",22)), faktor: Math.max(1,v("faktor",1.35)),
     maxArea: Math.max(1,v("maxArea",20))
   };
@@ -740,8 +740,14 @@ function etas(seq){
   }
   return {tiba:tiba,selesai:acc};
 }
+/* Jam mulai kerja dalam bentuk "HH:MM"; kosong atau tidak sah → 08:00. */
+function jamMulai(){
+  const v=el("mulai")?String(el("mulai").value||""):"";
+  const m=v.match(/^(\d{1,2})[:.](\d{2})/);
+  return m?("0"+m[1]).slice(-2)+":"+m[2]:"08:00";
+}
 function fmtJam(m){
-  const mm=(el("mulai")?el("mulai").value:"08:00").split(":").map(Number);
+  const mm=jamMulai().split(":").map(Number);
   const t=Math.round(mm[0]*60+mm[1]+m);
   return String(Math.floor(t/60)%24).padStart(2,"0")+":"+String(t%60).padStart(2,"0");
 }
@@ -1036,7 +1042,7 @@ function rankUrgent(){
   const sv=parseFloat(el("uServis").value);
   const jam=el("uJam").value;
   let cutoff=null;
-  if(jam){ const a=jam.split(":").map(Number), b=(el("mulai").value||"08:00").split(":").map(Number);
+  if(jam){ const a=jam.split(":").map(Number), b=jamMulai().split(":").map(Number);
            cutoff=(a[0]*60+a[1])-(b[0]*60+b[1]); }
   const c=cfg();
   const x={nama:el("uNama").value.trim()||"Outlet urgent",lat:co.lat,lng:co.lng,id:"URGENT",
@@ -1134,6 +1140,18 @@ function simpanDraf(){
   tulisDraf("tunggu");
   panggil("apiSimpanDraf",KUNCI,bentukDraf()).then(ts=>tulisDraf("ok",ts)).catch(e=>tulisDraf("gagal",(e&&e.message)||String(e)));
 }
+/* Samakan panel "2 · Teknisi" dengan rute yang sedang tampil:
+   jumlah teknisi tersedia minimal sebanyak rute, nama mengikuti nama rute. */
+let TEK_SHEET=[];
+function sinkronTeknisi(){
+  if(!ADMIN||!ROUTES.length) return;
+  const nama=ROUTES.map(r=>r.nama);
+  NAMA_TEK=nama.concat(NAMA_TEK.slice(nama.length));
+  const n=el("nTek");
+  if(n&&(parseInt(n.value)||0)<ROUTES.length) n.value=Math.min(8,ROUTES.length);
+  gambarTek();
+  if(nama.some((x,i)=>x!==TEK_SHEET[i])) tandai("tek");
+}
 function pulihkanDraf(d){
   MEMULIHKAN=true;
   try{
@@ -1143,6 +1161,7 @@ function pulihkanDraf(d){
     STOPS=(d.stops||[]).map(p=>Object.assign({},p));
     const peta={}; STOPS.forEach(p=>{ peta[p.__key]=p; });
     ROUTES=(d.rute||[]).map((r,i)=>({nama:r.nama,color:PALETTE[i%PALETTE.length],seq:(r.keys||[]).map(k=>peta[k]).filter(Boolean)}));
+    sinkronTeknisi();
     if(el("cnt")) el("cnt").textContent=STOPS.length+" titik";
     measure(); render();
     if(d.terbitBersih&&d.diterbitkan&&d.diterbitkan===STATUS.terbit.last) STATUS.terbit.savedVer=STATUS.terbit.ver;
@@ -1358,6 +1377,8 @@ function mulaiAdmin(B){
   ALIAS=B.alias||{};
   if(B.config){ ["nTek","minWO","mulai","servis","speed","faktor"].forEach(function(k){
     if(el(k)&&B.config[k]!=null) el(k).value=B.config[k]; }); }
+  if(!el("mulai").value) el("mulai").value="08:00";
+  TEK_SHEET=(B.teknisi||[]).slice();
   gambarTek();
   STATUS.viewer.user=B.viewerUser||""; if(B.viewerUser) el("vUser").value=B.viewerUser;
   STATUS.admin.user=B.adminUser||"";   if(B.adminUser)  el("aUser").value=B.adminUser;
@@ -1428,7 +1449,12 @@ function mulaiAdmin(B){
   // Urutan: draf kerja terakhir → rencana yang sudah terbit → daftar outlet di Sheet.
   if(B.draf&&B.draf.rute&&B.draf.rute.length) pulihkanDraf(B.draf);
   else if(B.rencana&&B.rencana.rute&&B.rencana.rute.length){
-    tampilkanRencana(B.rencana); STATUS.terbit.savedVer=STATUS.terbit.ver;
+    MEMULIHKAN=true;
+    try{
+      if(B.rencana.config&&B.rencana.config.mulai) el("mulai").value=B.rencana.config.mulai;
+      tampilkanRencana(B.rencana); sinkronTeknisi(); measure(); render();
+    } finally { MEMULIHKAN=false; }
+    STATUS.terbit.savedVer=STATUS.terbit.ver; tulisStatus("terbit"); jadwalkanDraf(true);
     note("ok","Menampilkan rencana yang sudah terbit. Perubahan berikutnya tersimpan otomatis sebagai draf.");
   }
   else if(B.outlet&&B.outlet.length) setStops(B.outlet,"<b>"+B.outlet.length+"</b> outlet dimuat dari Sheet.");
