@@ -403,11 +403,12 @@ const esc = s => String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&
 let ADMIN = false;          // ditentukan setelah login
 const RINCI = ["desc","serial","act","street","district","city"];
 /* Rincian outlet: baris 1 = Description · Serial · MaintActivityType, baris 2 = Street, District, City */
-function rinci1(p){ return [p.desc,p.serial,p.act].filter(Boolean); }
-function rinci2(p){ return [p.street,p.district,p.city].filter(Boolean); }
+function rinci1(p){ return [p.desc,p.serial,p.act].filter(v=>adaIsi(v)); }
+const adaIsi = v => !!v && !/^(#[A-Z0-9\/!?]+|N\/?A|-)$/i.test(String(v).trim());
+function rinci2(p){ return [p.street,p.district,p.city].filter(adaIsi); }
 function rinciHtml(p){
   const a=rinci1(p), b=rinci2(p); let h="";
-  if(a.length) h+='<span class="t3">'+[p.desc?esc(p.desc):"",p.serial?'<b>'+esc(p.serial)+'</b>':"",p.act?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
+  if(a.length) h+='<span class="t3">'+[adaIsi(p.desc)?esc(p.desc):"",adaIsi(p.serial)?'<b>'+esc(p.serial)+'</b>':"",adaIsi(p.act)?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
   if(b.length) h+='<span class="t4">'+esc(b.join(", "))+'</span>';
   return h;
 }
@@ -511,7 +512,8 @@ const adaKoordinat = p => (p.lat!=null&&p.lng!=null)||p.koor!=null;
 
 function buildFromRows(rows,hi,peta){
   const cell=v=>v==null?"":String(v).trim();
-  const ambil=(c,k)=>peta[k]!=null?cell(c[peta[k]]):"";
+  // Nilai galat Excel (#N/A, #REF!, …) dan tanda kosong dianggap tidak ada.
+  const ambil=(c,k)=>{ const v=peta[k]!=null?cell(c[peta[k]]):""; return /^(#[A-Z0-9\/!?]+|N\/?A|-)$/i.test(v)?"":v; };
   const out=[], lewat=[];
   for(let i=hi+1;i<rows.length;i++){
     const c=rows[i]||[];
