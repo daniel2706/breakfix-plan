@@ -145,6 +145,10 @@ a.gmp:hover{color:var(--accent);background:var(--accent-soft)}
 .tek-list{display:flex;flex-direction:column;gap:7px}
 .tek-item{display:flex;align-items:center;gap:8px}
 .tek-item i{width:11px;height:11px;border-radius:3px;flex:none}
+.tek-item input.warna{flex:none;width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:7px;background:none;cursor:pointer}
+.tek-item input.warna::-webkit-color-swatch-wrapper{padding:3px}
+.tek-item input.warna::-webkit-color-swatch{border:none;border-radius:4px}
+.tek-item input.warna::-moz-color-swatch{border:none;border-radius:4px}
 .tek-item input{flex:1}
 .rank{margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .rank .r{display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid var(--line-2);font-size:13px}
@@ -277,7 +281,8 @@ ol.stops li.aktif{background:var(--accent-soft)}
             </div>
           </div>
           <div class="hint" style="margin-top:-6px;margin-bottom:12px">Teknisi tersedia adalah batas atas. Bila outlet tidak cukup untuk memenuhi minimum bagi semua, jumlah yang dipakai otomatis dikurangi.</div>
-          <label>Nama teknisi</label>
+          <label>Nama dan warna rute teknisi</label>
+          <div class="hint" style="margin:-2px 0 8px">Ketuk kotak warna untuk mengganti warna rute di peta. Hindari merah, karena sudah dipakai untuk tanda URGENT.</div>
           <div class="tek-list" id="tekList"></div>
           <div class="btnrow" style="margin-top:9px">
             <button class="ghost" id="simpanTek">Simpan nama ke Sheet</button>
@@ -415,7 +420,9 @@ function rinciHtml(p){
 }
 let KUNCI = "";             // token sesi admin
 
-let STOPS = [], ROUTES = [], NAMA_TEK = [], DITERBITKAN = null;
+let STOPS = [], ROUTES = [], NAMA_TEK = [], WARNA_TEK = [], DITERBITKAN = null;
+/* Warna teknisi ke-i: pilihan admin, atau palet bawaan. */
+const warnaTek = i => WARNA_TEK[i] || PALETTE[i%PALETTE.length];
 
 /* ---------- jembatan ke server ---------- */
 /* Dua mode: di Apps Script memakai google.script.run; di bf.cokesoe.com
@@ -758,7 +765,7 @@ function compute(){
   const c=cfg();
   const groups=tightClusters(STOPS,c.k,{maxKm:c.maxArea,minWO:teknisiEfektif().min});
   ROUTES=groups.map(function(g,i){
-    return { nama: NAMA_TEK[i] || ("Teknisi "+(i+1)), color: PALETTE[i%PALETTE.length], seq: solve(g) };
+    return { nama: NAMA_TEK[i] || ("Teknisi "+(i+1)), color: warnaTek(i), seq: solve(g) };
   });
   measure(); render();
 }
@@ -1124,8 +1131,9 @@ const PARAM=["nTek","minWO","mulai","servis","speed","faktor","maxArea"];
 function bentukDraf(){
   return {
     stops: STOPS.map(p=>Object.assign({},p)),
-    rute: ROUTES.map(r=>({nama:r.nama, keys:r.seq.map(p=>p.__key)})),
+    rute: ROUTES.map(r=>({nama:r.nama, warna:r.color, keys:r.seq.map(p=>p.__key)})),
     namaTek: NAMA_TEK.slice(),
+    warnaTek: WARNA_TEK.slice(),
     param: PARAM.reduce((o,k)=>{ if(el(k)) o[k]=el(k).value; return o; },{}),
     terbitBersih: STATUS.terbit.ver===STATUS.terbit.savedVer,
     diterbitkan: STATUS.terbit.last||null
@@ -1157,6 +1165,7 @@ function sinkronTeknisi(){
   if(!ADMIN||!ROUTES.length) return;
   const nama=ROUTES.map(r=>r.nama);
   NAMA_TEK=nama.concat(NAMA_TEK.slice(nama.length));
+  WARNA_TEK=ROUTES.map(r=>r.color).concat(WARNA_TEK.slice(ROUTES.length));
   const n=el("nTek");
   if(n&&(parseInt(n.value)||0)<ROUTES.length) n.value=Math.min(8,ROUTES.length);
   gambarTek();
@@ -1167,10 +1176,11 @@ function pulihkanDraf(d){
   try{
     Object.keys(d.param||{}).forEach(k=>{ if(el(k)&&d.param[k]!=null) el(k).value=d.param[k]; });
     if(d.namaTek&&d.namaTek.length) NAMA_TEK=d.namaTek.slice();
+    WARNA_TEK=(d.warnaTek||[]).slice();
     gambarTek();
     STOPS=(d.stops||[]).map(p=>Object.assign({},p));
     const peta={}; STOPS.forEach(p=>{ peta[p.__key]=p; });
-    ROUTES=(d.rute||[]).map((r,i)=>({nama:r.nama,color:PALETTE[i%PALETTE.length],seq:(r.keys||[]).map(k=>peta[k]).filter(Boolean)}));
+    ROUTES=(d.rute||[]).map((r,i)=>({nama:r.nama,color:r.warna||warnaTek(i),seq:(r.keys||[]).map(k=>peta[k]).filter(Boolean)}));
     sinkronTeknisi();
     if(el("cnt")) el("cnt").textContent=STOPS.length+" titik";
     measure(); render();
@@ -1272,9 +1282,18 @@ function gambarTek(){
   while(NAMA_TEK.length<n){ NAMA_TEK.push("Teknisi "+(NAMA_TEK.length+1)); tambah=true; }
   if(tambah) tandai("tek");
   el("tekList").innerHTML=Array.from({length:n},function(_,i){
-    return '<div class="tek-item"><i style="background:'+PALETTE[i%PALETTE.length]+'"></i>'+
+    return '<div class="tek-item"><input type="color" class="warna" value="'+warnaTek(i)+'" data-warna="'+i+'" title="Pilih warna rute '+esc(NAMA_TEK[i])+'">'+
       '<input type="text" value="'+esc(NAMA_TEK[i])+'" data-tek="'+i+'" placeholder="Teknisi '+(i+1)+'"></div>';
   }).join("");
+  // Warna rute: berlaku langsung di peta & kartu, tersimpan di draf, ikut terbit ke penonton.
+  el("tekList").querySelectorAll("[data-warna]").forEach(function(inp){
+    inp.oninput=inp.onchange=function(){
+      const i=+inp.dataset.warna;
+      WARNA_TEK[i]=inp.value;
+      if(ROUTES[i]) ROUTES[i].color=inp.value;
+      render();
+    };
+  });
   el("tekList").querySelectorAll("[data-tek]").forEach(function(inp){
     inp.onchange=function(){
       NAMA_TEK[+inp.dataset.tek]=inp.value.trim()||("Teknisi "+(+inp.dataset.tek+1));
@@ -1301,7 +1320,7 @@ function tampilkanRencana(p){
   STOPS=[];
   ROUTES=p.rute.map(function(r,i){
     r.stop.forEach(s=>STOPS.push(s));
-    return {nama:r.nama,color:PALETTE[i%PALETTE.length],seq:r.stop};
+    return {nama:r.nama,color:r.warna||PALETTE[i%PALETTE.length],seq:r.stop};
   });
   measure(); render();
   lastUpdate(p.diterbitkan);
@@ -1426,7 +1445,7 @@ function mulaiAdmin(B){
       const rencana={ config:{mulai:c.mulai,servis:c.servis,speed:c.speed,faktor:c.faktor},
         rute: ROUTES.filter(r=>r.stops>0).map(function(r){
           const E=etas(r.seq);
-          return {nama:r.nama, km:+r.km.toFixed(2), stop:r.seq.map(function(p,i){
+          return {nama:r.nama, warna:r.color, km:+r.km.toFixed(2), stop:r.seq.map(function(p,i){
             const o={nama:p.nama,id:p.id,lat:p.lat,lng:p.lng,servis:p.servis,urgent:!!p.urgent,eta:fmtJam(E.tiba[i]),__key:p.__key};
             RINCI.forEach(k=>{ if(p[k]) o[k]=p[k]; });
             return o;
