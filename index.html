@@ -804,7 +804,7 @@ function gambarPeta(tanpaFit){
                   (rinci2(p).length?'<br><span style="color:#75857D">'+esc(rinci2(p).join(", "))+'</span>':'')+
                   '<br>'+esc(r.nama)+' · perhentian '+(i+1)+
                   (p.id&&p.id!=="URGENT"?' · WO '+esc(p.id):'')+
-                  '<br><a target="_blank" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">Buka di Google Maps</a>',{autoPan:true});
+                  '<br><a target="_blank" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'">Buka di Google Maps</a>',{autoPan:true,autoPanPaddingTopLeft:[56,16],autoPanPaddingBottomRight:[16,16]});
       if(!ADMIN) m.on("click",function(){ fokusTitik(ri,key); });
       PENANDA[key]={m:m,lat:p.lat,lng:p.lng};
     });
