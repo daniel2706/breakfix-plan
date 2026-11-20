@@ -217,7 +217,9 @@ body.penonton header h1{text-wrap:balance}
 body.penonton .hdr-kanan{flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;padding-top:2px}
 body.penonton .hdr-kanan #keluar{padding:4px 2px;font-size:13.5px}
 body.penonton #stats{display:none}
-body.penonton .cari{margin:10px 0 14px}
+body.penonton .cari{margin:8px 0 2px}
+body.penonton .layout.solo .peta-wrap{padding-bottom:8px;box-shadow:0 6px 8px -8px rgba(0,0,0,.18)}
+body.penonton .layout.solo .routes{margin-top:10px}
 body.penonton .layout.solo #map{height:clamp(240px,44vh,520px);transition:none}
 @media(max-width:600px){
   body.penonton .wrap{padding:14px 12px 48px}
@@ -1088,6 +1090,11 @@ function pasangCari(){
       FOKUS.ri=null; FOKUS.key=null; hapusJalan(); if(MAP) MAP.closePopup(); terapkanFokus(); gambarPeta();
     }
     saringCari();
+    if(!ADMIN&&inp.value.trim()&&PETA_UK.h0&&window.scrollY>PETA_UK.h0-PETA_UK.min){
+      const c=[...el("routes").querySelectorAll(".route")].find(x=>!x.classList.contains("cari-sembunyi"));
+      const bawah=document.querySelector(".peta-wrap").getBoundingClientRect().bottom;
+      if(c){ const d=c.getBoundingClientRect().top-bawah-8; if(Math.abs(d)>4) window.scrollBy(0,d); }
+    }
   });
   inp.addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); inp.value=""; saringCari(); } });
   el("cariHapus").onclick=function(){ inp.value=""; saringCari(); inp.focus(); };
@@ -1099,7 +1106,8 @@ function ukurPeta(){
   if(ADMIN||!ROUTES.length){ m.style.height=""; PETA_UK.h0=0; return; }
   const ih=window.innerHeight, w=window.innerWidth;
   // abaikan perubahan tinggi kecil akibat bilah alamat browser HP yang muncul/hilang
-  if(PETA_UK.h0&&w===PETA_UK.w&&Math.abs(ih-PETA_UK.ih)<140) return aturTinggiPeta();
+  const ketik=document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+  if(PETA_UK.h0&&w===PETA_UK.w&&(ketik||Math.abs(ih-PETA_UK.ih)<140)) return aturTinggiPeta();
   PETA_UK.w=w; PETA_UK.ih=ih;
   const atas=el("isi").getBoundingClientRect().top+window.scrollY;
   const cari=el("cariBox")?el("cariBox").offsetHeight+24:70;
@@ -1866,6 +1874,8 @@ function masuk(peran,token,data){
   el("role").className="role "+(ADMIN?"admin":"lihat"); el("role").textContent=ADMIN?"Admin":"Hanya lihat";
   el("isi").classList.toggle("solo",!ADMIN);
   document.body.classList.toggle("penonton",!ADMIN);
+  // penonton: kolom pencarian dipindah ke dalam blok peta yang menempel, admin: tetap di bawah ringkasan
+  if(el("cariBox")){ if(ADMIN) el("stats").after(el("cariBox")); else document.querySelector(".peta-wrap").appendChild(el("cariBox")); }
   sembunyi("panelAdmin",!ADMIN); sembunyi("catatan",!ADMIN);
   siapkanPeta();
   data=data||{};
