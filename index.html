@@ -149,7 +149,23 @@ ol.stops .t1 .pv{font-family:ui-monospace,monospace;font-weight:500;font-size:12
 .jalanrow .status{margin-top:7px}
 .leaflet-tooltip.lbl-jalan{font-weight:700;font-size:12px;line-height:1.2;font-family:inherit;padding:3px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.15);box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;white-space:nowrap}
 .leaflet-tooltip.lbl-jalan:before{display:none}
-.leaflet-tooltip.lbl-jalan.utama{background:#1A73E8;color:#fff;border-color:#1A73E8}
+.leaflet-tooltip.lbl-jalan.utama{background:#E8202A;color:#fff;border-color:#E8202A;box-shadow:0 0 0 3px rgba(255,45,45,.25),0 2px 8px rgba(232,32,42,.45)}
+/* rute jalan utama: merah bercahaya yang berdenyut + titik cahaya mengalir ke arah tujuan */
+path.jalan-glow{stroke:#FF2D2D;filter:drop-shadow(0 0 3px rgba(255,45,45,.95)) drop-shadow(0 0 8px rgba(255,45,45,.6));animation:jalanDenyut 1.8s ease-in-out infinite}
+path.jalan-alir{stroke:#FFE3E3;stroke-dasharray:1 22;stroke-linecap:round;animation:jalanAlir 1.1s linear infinite}
+@keyframes jalanDenyut{0%,100%{stroke-opacity:1;stroke-width:6px}50%{stroke-opacity:.72;stroke-width:8px}}
+@keyframes jalanAlir{to{stroke-dashoffset:-23}}
+/* titik lokasi saat ini: inti merah terang + gelombang yang memancar (gaya Find My) */
+.lokasi-saya{position:relative;width:22px;height:22px}
+.lokasi-saya .inti{position:absolute;inset:3px;border-radius:50%;background:#FF2D2D;border:3px solid #fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.08),0 0 10px 2px rgba(255,45,45,.85);animation:intiDenyut 1.8s ease-in-out infinite}
+.lokasi-saya .gelombang{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;
+  background:rgba(255,45,45,.35);border:1.5px solid rgba(255,45,45,.65);animation:gelombang 2.4s cubic-bezier(.2,.6,.35,1) infinite;pointer-events:none}
+.lokasi-saya .gelombang.g2{animation-delay:.8s}
+.lokasi-saya .gelombang.g3{animation-delay:1.6s}
+@keyframes gelombang{0%{transform:scale(.6);opacity:.95}100%{transform:scale(4.2);opacity:0}}
+@keyframes intiDenyut{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@media (prefers-reduced-motion:reduce){path.jalan-glow,path.jalan-alir,.lokasi-saya .inti,.lokasi-saya .gelombang{animation:none}}
 .leaflet-tooltip.lbl-jalan.alt{background:#fff;color:#2b3a45}
 ol.stops{list-style:none;margin:0;padding:6px 0}
 ol.stops li{display:flex;gap:10px;padding:7px 14px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
@@ -1018,11 +1034,14 @@ function gambarJalan(ri,me,j,pilih,tanpaFit){
     g.on("click",function(){ gambarJalan(ri,me,j,i,true); infoRute(); });
   });
   const u=semua[pilih];
-  L.polyline(u.c,{color:"#ffffff",weight:11,opacity:.95,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
-  L.polyline(u.c,{color:warna,weight:6,opacity:1,bubblingMouseEvents:false}).addTo(LAPIS_JALAN)
+  L.polyline(u.c,{color:"#ffffff",weight:12,opacity:.95,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
+  L.polyline(u.c,{color:"#FF2D2D",weight:6,opacity:1,className:"jalan-glow",bubblingMouseEvents:false}).addTo(LAPIS_JALAN)
     .bindTooltip(durJalan(u.menit)+" · "+kmJalan(u.km),{permanent:true,direction:"center",className:"lbl-jalan utama",interactive:true});
-  L.circleMarker([me.lat,me.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#1A73E8",fillOpacity:1,bubblingMouseEvents:false})
-    .addTo(LAPIS_JALAN).bindTooltip("Lokasi Anda");
+  L.polyline(u.c,{color:"#FFE3E3",weight:3,opacity:.95,className:"jalan-alir",interactive:false}).addTo(LAPIS_JALAN);
+  L.marker([me.lat,me.lng],{
+    icon:L.divIcon({className:"",html:'<div class="lokasi-saya"><span class="gelombang"></span><span class="gelombang g2"></span><span class="gelombang g3"></span><span class="inti"></span></div>',iconSize:[22,22],iconAnchor:[11,11]}),
+    zIndexOffset:2000,keyboard:false,bubblingMouseEvents:false
+  }).addTo(LAPIS_JALAN).bindTooltip("Lokasi Anda");
   const lama=JALAN&&JALAN.ri===ri?JALAN:{};
   JALAN={ri:ri,me:me,j:j,pilih:pilih,jumlah:semua.length,satu:lama.satu,ke:lama.ke};
   if(!tanpaFit) MAP.fitBounds(kotak.pad(.08));
