@@ -1196,11 +1196,12 @@ function fokusTeknisi(ri){
   if(MAP) MAP.closePopup();
   terapkanFokus(); gambarPeta();
 }
+const ZOOM_TITIK=14;   // zoom sedang: titik terlihat bersama jalan & lingkungan sekitarnya
 function fokusTitik(ri,key){
   FOKUS.key=key; FOKUS.dariSemua=(FOKUS.ri==null);
   terapkanFokus(); gambarPeta(true);
   const t=PENANDA[key];
-  if(t&&MAP){ MAP.setView([t.lat,t.lng],Math.max(MAP.getZoom(),16),{animate:false}); setTimeout(()=>t.m.openPopup(),50); }
+  if(t&&MAP){ MAP.setView([t.lat,t.lng],ZOOM_TITIK,{animate:false}); setTimeout(()=>t.m.openPopup(),50); }
 }
 /* Kembali satu langkah: outlet → teknisi (atau tampilan awal) → tampilan awal. */
 function kembali(){
