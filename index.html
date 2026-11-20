@@ -119,6 +119,9 @@ ol.stops .t1 .pv{font-family:ui-monospace,monospace;font-weight:500;font-size:12
   border-radius:7px;background:var(--accent-soft);color:var(--accent-ink);border:1px solid transparent;transition:.12s}
 .gmbtn:hover{border-color:var(--accent)}
 .gmbagian{display:grid;gap:6px}
+.jalanrow{padding:0 14px 10px;border-bottom:1px solid var(--line-2)}
+.jalanbtn{width:100%;border:1px dashed var(--line);color:var(--accent-ink);font-size:12.5px;padding:7px 10px}
+.jalanrow .status{margin-top:7px}
 ol.stops{list-style:none;margin:0;padding:6px 0}
 ol.stops li{display:flex;gap:10px;padding:7px 14px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
 ol.stops li:last-child{border-bottom:none}
@@ -369,6 +372,13 @@ ol.stops li.aktif{background:var(--accent-soft)}
           <button class="ghost" id="simpanAdmin">Ganti login admin</button>
           <div class="status idle" id="stAdmin"></div>
           <div class="hint" style="margin-top:6px">Sesi admin berlaku 1 hari. Kata sandi disimpan sebagai hash di Script Properties, bukan di Sheet.</div>
+
+          <hr class="pisah">
+          <label for="orsKey" style="margin-bottom:8px">Rute jalan (OpenRouteService)</label>
+          <div class="field"><input type="text" id="orsKey" autocomplete="off" spellcheck="false" placeholder="Tempel kunci API di sini"></div>
+          <button class="ghost" id="simpanOrs">Simpan kunci rute jalan</button>
+          <div class="status idle" id="stOrs"></div>
+          <div class="hint" style="margin-top:6px">Kunci diuji lalu disimpan di Script Properties, tidak tampil di halaman. Simpan isian kosong untuk menonaktifkan.</div>
         </div>
       </div>
     </div>
@@ -824,7 +834,7 @@ function gambarPeta(tanpaFit){
                   (rinci2(p).length?'<br><span style="color:#75857D">'+esc(rinci2(p).join(", "))+'</span>':'')+
                   '<br>'+esc(r.nama)+' · perhentian '+(i+1)+
                   (p.id&&p.id!=="URGENT"?' · WO '+esc(p.id):'')+
-                  '<br>'+tautanTitik(p,'Buka di Google Maps'),{autoPan:true,autoPanPaddingTopLeft:[56,16],autoPanPaddingBottomRight:[16,16]});
+                  '<br>'+tautanTitik(p,'Buka di Google Maps')+(ORS_AKTIF?' · <a href="#" data-jalan-ke="'+ri+'|'+esc(key)+'">Rute jalan ke sini</a>':''),{autoPan:true,autoPanPaddingTopLeft:[56,16],autoPanPaddingBottomRight:[16,16]});
       if(!ADMIN) m.on("click",function(){ fokusTitik(ri,key); });
       PENANDA[key]={m:m,lat:p.lat,lng:p.lng};
     });
@@ -833,6 +843,80 @@ function gambarPeta(tanpaFit){
   const target=dipilih.length?dipilih:semua;
   if(target.length) MAP.fitBounds(L.latLngBounds(target).pad(.12));
 }
+
+/* ---------- rute jalan dari lokasi HP ----------
+   Garis mengikuti jalan dari posisi teknisi saat ini ke outlet (satu outlet,
+   atau seluruh outlet sesuai urutan). Dihitung di server (OpenRouteService)
+   setiap kali diminta, sehingga tiap teknisi melihat rute dari lokasinya sendiri. */
+let JALAN=null, LAPIS_JALAN=null, ORS_AKTIF=false;
+const durJalan=m=>{ m=Math.round(m); const h=Math.floor(m/60), x=m%60; return h?(h+" jam"+(x?" "+x+" mnt":"")):(x+" mnt"); };
+function hapusJalan(){
+  if(LAPIS_JALAN){ try{ LAPIS_JALAN.remove(); }catch(e){} LAPIS_JALAN=null; }
+  if(JALAN&&el("jl"+JALAN.ri)) el("jl"+JALAN.ri).classList.add("hidden");
+  JALAN=null;
+}
+function infoJalan(ri,html,kelas){
+  const b=el("jl"+ri); if(!b) return;
+  b.className="status "+(kelas||"idle"); b.innerHTML='<i></i><span>'+html+'</span>';
+}
+function lokasiSaya(){
+  return new Promise(function(res,rej){
+    if(!navigator.geolocation) return rej(new Error("Browser ini tidak dapat membaca lokasi HP."));
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),
+      e=>rej(new Error(e.code===1?"Izin lokasi ditolak. Izinkan akses lokasi untuk situs ini, lalu coba lagi."
+                                 :"Lokasi HP tidak dapat ditentukan. Pastikan GPS aktif.")),
+      {enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+  });
+}
+function ruteJalan(ri,keyTujuan){
+  const r=ROUTES[ri]; if(!r) return;
+  const tujuan=keyTujuan?r.seq.filter(p=>p.__key===keyTujuan):r.seq;
+  if(!tujuan.length) return;
+  if(tujuan.length>49) return infoJalan(ri,"Terlalu banyak outlet untuk satu rute jalan (maks. 49).","bad");
+  infoJalan(ri,"Membaca lokasi HP…","busy");
+  lokasiSaya().then(function(me){
+    infoJalan(ri,"Menghitung rute jalan…","busy");
+    const titik=[[me.lat,me.lng]].concat(tujuan.map(p=>[p.lat,p.lng]));
+    return panggil("apiRuteJalan",tokenAmbil(),titik).then(j=>({me:me,j:j}));
+  }).then(function(h){
+    gambarJalan(ri,h.me,h.j);
+    const j=h.j, satu=!!keyTujuan;
+    const ke=satu?esc(tujuan[0].nama):"outlet 1–"+tujuan.length;
+    infoJalan(ri,"Dari lokasi Anda ke "+ke+": <b>±"+durJalan(j.menit)+"</b> · "+j.km.toLocaleString("id-ID")+" km"+
+      (!satu&&j.legs&&j.legs[0]?" (ke outlet 1: ±"+durJalan(j.legs[0].menit)+")":"")+
+      ". Perkiraan waktu mobil tanpa macet, belum termasuk waktu servis.","ok");
+  }).catch(function(e){ infoJalan(ri,esc((e&&e.message)||String(e)),"bad"); });
+}
+function gambarJalan(ri,me,j){
+  if(!MAP) return;
+  if(LAPIS_JALAN){ try{ LAPIS_JALAN.remove(); }catch(e){} }
+  LAPIS_JALAN=L.layerGroup().addTo(MAP);
+  const warna=(ROUTES[ri]&&ROUTES[ri].color)||"#1A73E8";
+  L.polyline(j.c,{color:"#ffffff",weight:9,opacity:.95}).addTo(LAPIS_JALAN);
+  L.polyline(j.c,{color:warna,weight:5,opacity:1}).addTo(LAPIS_JALAN);
+  L.circleMarker([me.lat,me.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#1A73E8",fillOpacity:1})
+    .addTo(LAPIS_JALAN).bindTooltip("Lokasi Anda");
+  JALAN={ri:ri};
+  const kotak=L.latLngBounds(j.c); kotak.extend([me.lat,me.lng]);
+  MAP.fitBounds(kotak.pad(.08));
+}
+// Tombol di kartu dan tautan di popup peta (dipasang di fase capture agar tidak dianggap "ketuk untuk kembali").
+document.addEventListener("click",function(e){
+  const b=e.target.closest&&e.target.closest("[data-jalan],[data-jalan-ke]");
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if(b.hasAttribute("data-jalan")){
+    const ri=+b.dataset.jalan;
+    if(!ADMIN&&FOKUS.ri!==ri) fokusTeknisi(ri);
+    ruteJalan(ri,null);
+  } else {
+    const x=b.dataset.jalanKe.split("|"), ri=+x[0];
+    if(MAP) MAP.closePopup();
+    if(!ADMIN&&FOKUS.ri!==ri) fokusTeknisi(ri);
+    ruteJalan(ri,x.slice(1).join("|"));
+  }
+},true);
 
 /* ---------- fokus tampilan penonton ---------- */
 function terapkanFokus(){
@@ -845,6 +929,7 @@ function terapkanFokus(){
     : "Ketuk kartu teknisi untuk fokus · ketuk outlet untuk melihatnya di peta.";
 }
 function fokusTeknisi(ri){
+  if(JALAN&&JALAN.ri!==ri) hapusJalan();
   FOKUS.ri=ri; FOKUS.key=null;
   if(MAP) MAP.closePopup();
   terapkanFokus(); gambarPeta();
@@ -860,6 +945,7 @@ function kembali(){
   if(FOKUS.key!=null){ FOKUS.key=null; if(FOKUS.dariSemua) FOKUS.ri=null; }
   else if(FOKUS.ri!=null){ FOKUS.ri=null; }
   else return;
+  if(FOKUS.ri==null) hapusJalan();
   if(MAP) MAP.closePopup();
   terapkanFokus(); gambarPeta();
 }
@@ -925,12 +1011,20 @@ const STATUS={
   tek:   {box:"stTek",    busy:false, ver:0, savedVer:0, last:null, error:null},
   terbit:{box:"stTerbit", busy:false, ver:0, savedVer:0, last:null, error:null},
   viewer:{box:"stViewer", busy:false, ver:0, savedVer:0, last:null, error:null, user:""},
-  admin: {box:"stAdmin",  busy:false, ver:0, savedVer:0, last:null, error:null, user:""}
+  admin: {box:"stAdmin",  busy:false, ver:0, savedVer:0, last:null, error:null, user:""},
+  ors:   {box:"stOrs",    busy:false, ver:0, savedVer:0, last:null, error:null, user:""}
 };
 function jamPendek(t){ return new Date(t).toLocaleString("id-ID",{dateStyle:"medium",timeStyle:"short"}); }
 function tulisStatus(key){
   const s=STATUS[key], box=el(s.box); if(!box) return;
   const dirty=s.ver!==s.savedVer; let cls, txt;
+  if(key==="ors"){
+    if(s.busy){ cls="busy"; txt="Menguji kunci…"; }
+    else if(s.error){ cls="bad"; txt="Gagal: "+esc(s.error); }
+    else if(s.user){ cls="ok"; txt="Rute jalan aktif. Tombol rute jalan muncul di setiap kartu teknisi."; }
+    else { cls="warn"; txt="Rute jalan belum aktif — isi kunci OpenRouteService."; }
+    box.className="status "+cls; box.innerHTML='<i></i><span>'+txt+'</span>'; return;
+  }
   if(key==="viewer"||key==="admin"){
     if(s.busy){ cls="busy"; txt="Sedang menyimpan…"; }
     else if(s.error){ cls="bad"; txt="Gagal: "+esc(s.error); }
@@ -969,7 +1063,7 @@ function jalankan(key,btn,labelProses,fn,args,onOk){
 }
 
 function render(){
-  if(ADMIN){ tandai("terbit"); jadwalkanDraf(); }
+  if(ADMIN){ tandai("terbit"); jadwalkanDraf(); hapusJalan(); }
   const T=teknisiEfektif();
   const totKm=ROUTES.reduce((s,r)=>s+r.km,0);
   const durs=ROUTES.filter(r=>r.stops>0).map(r=>r.menit);
@@ -1019,6 +1113,7 @@ function render(){
       '<span>area <b>'+r.spread.toFixed(1)+'</b> km'+(r.stops>0&&r.spread>BATAS+0.05?' <span class="badge">&gt; '+BATAS+' KM</span>':'')+'</span><span>selesai <b>'+fmtJam(r.menit)+'</b></span></div>'
        :'<div class="meta"><span><b>'+r.stops+'</b> outlet</span></div>')+
       '<div class="gmrow">'+gmapsLink(r)+'</div>'+
+      (ORS_AKTIF?'<div class="jalanrow"><button type="button" class="ghost jalanbtn" data-jalan="'+ri+'">Tampilkan rute jalan dari lokasi saya</button><div class="status idle hidden" id="jl'+ri+'"></div></div>':'')+
       '<ol class="stops">'+(li||'<li><span class="txt"><span class="t2">Tidak ada outlet</span></span></li>')+'</ol></div>';
   }).join("");
 
@@ -1366,7 +1461,7 @@ function tampilSetup(){
   el("lede").textContent="Setup akun admin.";
 }
 function kosongkan(){
-  FOKUS.ri=null; FOKUS.key=null;
+  FOKUS.ri=null; FOKUS.key=null; hapusJalan();
   clearTimeout(DRAF_TIMER); DRAF_TIMER=null; DRAF_TUNDA=false;
   ADMIN=false; KUNCI=""; ROUTES=[]; STOPS=[]; URGENT=null;
   ["msg","msgAdapt","stats","routes","uHasil","peta"].forEach(id=>{ if(el(id)) el(id).innerHTML=""; });
@@ -1382,6 +1477,7 @@ function masuk(peran,token,data){
   sembunyi("panelAdmin",!ADMIN); sembunyi("catatan",!ADMIN);
   siapkanPeta();
   data=data||{};
+  ORS_AKTIF=!!data.orsAda;
   NAMA_TEK=(data.teknisi||["Teknisi 1","Teknisi 2","Teknisi 3"]).slice();
   if(MAP){ if(ADMIN) MAP.scrollWheelZoom.enable(); else MAP.scrollWheelZoom.disable(); }
   sembunyi("petunjuk",ADMIN);
@@ -1480,6 +1576,13 @@ function mulaiAdmin(B){
         STATUS.viewer.user=user; el("vPass").value=""; tulisStatus("viewer");
       });
     };
+    el("simpanOrs").onclick=function(){
+      const k=el("orsKey").value.trim();
+      jalankan("ors",this,"Menguji…","apiAturORS",[KUNCI,k],function(aktif){
+        STATUS.ors.user=aktif?"aktif":""; el("orsKey").value=""; tulisStatus("ors");
+        ORS_AKTIF=!!aktif; render();
+      });
+    };
     el("simpanAdmin").onclick=function(){
       const u=el("aUser").value.trim(), p=el("aPass").value;
       if(!u||!p){ STATUS.admin.error="Isi nama pengguna dan kata sandi baru."; tulisStatus("admin"); STATUS.admin.error=null; return; }
@@ -1508,7 +1611,8 @@ function mulaiAdmin(B){
   }
   else if(B.outlet&&B.outlet.length) setStops(B.outlet,"<b>"+B.outlet.length+"</b> outlet dimuat dari Sheet.");
   else { note("warn","Tab <b>Outlet</b> masih kosong. Unggah berkas atau isi langsung di Spreadsheet."); tulisDraf("kosong"); }
-  ["terbit","tek","viewer","admin"].forEach(tulisStatus);
+  STATUS.ors.user=B.orsAda?"aktif":"";
+  ["terbit","tek","viewer","admin","ors"].forEach(tulisStatus);
 }
 
 /* ---------- mulai ---------- */
