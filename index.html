@@ -163,6 +163,10 @@ path.jalan-alir{stroke:#FFE3E3;stroke-dasharray:1 22;stroke-linecap:round;animat
   background:rgba(255,45,45,.35);border:1.5px solid rgba(255,45,45,.65);animation:gelombang 2.4s cubic-bezier(.2,.6,.35,1) infinite;pointer-events:none}
 .lokasi-saya .gelombang.g2{animation-delay:.8s}
 .lokasi-saya .gelombang.g3{animation-delay:1.6s}
+.lokasi-saya .arah{position:absolute;left:50%;top:50%;width:96px;height:96px;margin:-48px 0 0 -48px;pointer-events:none;opacity:0;transition:opacity .4s;will-change:transform}
+.lokasi-saya .arah svg{display:block}
+.lokasi-saya.ada-arah .arah{opacity:1}
+.lokasi-saya.ada-arah .gelombang{animation-duration:3s}
 @keyframes gelombang{0%{transform:scale(.6);opacity:.95}100%{transform:scale(4.2);opacity:0}}
 @keyframes intiDenyut{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 @media (prefers-reduced-motion:reduce){path.jalan-glow,path.jalan-alir,.lokasi-saya .inti,.lokasi-saya .gelombang{animation:none}}
@@ -1349,6 +1353,48 @@ function tulisSuara(){ el("navSuara").innerHTML=NAV&&NAV.suara?SVG_SUARA_ON:SVG_
 async function kunciLayar(){
   try{ if(NAV&&"wakeLock" in navigator&&document.visibilityState==="visible") NAV.wl=await navigator.wakeLock.request("screen"); }catch(e){}
 }
+/* Arah hadap HP: kompas (deviceorientation) bila tersedia; bila tidak, arah gerak dari GPS saat melaju.
+   Peta menghadap utara, jadi sudut kompas dipakai langsung untuk memutar kerucut arah. */
+const ARAH={kompas:null,kompasPada:0,gps:null,tampil:null,raf:0,aktif:false};
+function sudutLayar(){ return (screen.orientation&&typeof screen.orientation.angle==="number")?screen.orientation.angle:(window.orientation||0); }
+function terimaOrientasi(e){
+  let h=null;
+  if(typeof e.webkitCompassHeading==="number"&&!isNaN(e.webkitCompassHeading)) h=e.webkitCompassHeading;
+  else if((e.absolute||e.type==="deviceorientationabsolute")&&typeof e.alpha==="number") h=360-e.alpha;
+  if(h==null) return;
+  ARAH.kompas=((h+sudutLayar())%360+360)%360; ARAH.kompasPada=Date.now();
+  jadwalArah();
+}
+function mulaiKompas(){
+  if(ARAH.aktif) return; ARAH.aktif=true;
+  const pasang=function(){
+    if("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute",terimaOrientasi);
+    else window.addEventListener("deviceorientation",terimaOrientasi);
+  };
+  pasang();   // pendengar yang sama tidak terpasang dua kali
+  // iPhone (iOS 13+) dan sebagian browser meminta izin sensor; harus dipanggil langsung dari ketukan pengguna.
+  if(window.DeviceOrientationEvent&&typeof DeviceOrientationEvent.requestPermission==="function"){
+    try{ DeviceOrientationEvent.requestPermission().then(function(s){ if(s==="granted") pasang(); }).catch(function(){}); }catch(e){}
+  }
+}
+function hentikanKompas(){
+  window.removeEventListener("deviceorientationabsolute",terimaOrientasi);
+  window.removeEventListener("deviceorientation",terimaOrientasi);
+  ARAH.aktif=false; ARAH.kompas=null; ARAH.gps=null; ARAH.tampil=null;
+}
+function jadwalArah(){ if(!ARAH.raf) ARAH.raf=requestAnimationFrame(function(){ ARAH.raf=0; terapkanArah(false); }); }
+function terapkanArah(langsung){
+  if(!NAV||!NAV.saya) return;
+  const elm=NAV.saya.getElement&&NAV.saya.getElement(); if(!elm) return;
+  const wadah=elm.querySelector(".lokasi-saya"), kerucut=elm.querySelector(".arah"); if(!wadah||!kerucut) return;
+  const kompasSegar=ARAH.kompas!=null&&Date.now()-ARAH.kompasPada<3000;
+  const target=kompasSegar?ARAH.kompas:ARAH.gps;
+  if(target==null){ wadah.classList.remove("ada-arah"); return; }
+  if(ARAH.tampil==null||langsung) ARAH.tampil=target;
+  else { const d=((target-ARAH.tampil+540)%360)-180; ARAH.tampil=(ARAH.tampil+d*0.35+360)%360; }
+  kerucut.style.transform="rotate("+ARAH.tampil.toFixed(1)+"deg)";
+  wadah.classList.add("ada-arah");
+}
 function mulaiNavigasi(ri,key){
   const r=ROUTES[ri], p=r&&r.seq.find(x=>(x.__key||"")===key); if(!p) return;
   if(!ORS_AKTIF){
@@ -1365,6 +1411,7 @@ function mulaiNavigasi(ri,key){
   el("navWaktu").textContent="—"; el("navInfo").textContent="ke "+p.nama;
   setTimeout(function(){ if(MAP) MAP.invalidateSize(); },60);
   ucap("Memulai navigasi ke "+p.nama);
+  mulaiKompas();
   kunciLayar();
   lokasiSaya().then(function(me){
     if(!NAV) return;
@@ -1402,13 +1449,15 @@ function pasangRuteNav(j){
     L.polyline(c,{color:"#FFE3E3",weight:3,opacity:.95,className:"jalan-alir",interactive:false}).addTo(NAV.lapis)
   ];
   NAV.saya=L.marker([NAV.pos.lat,NAV.pos.lng],{
-    icon:L.divIcon({className:"",html:'<div class="lokasi-saya"><span class="gelombang"></span><span class="gelombang g2"></span><span class="gelombang g3"></span><span class="inti"></span></div>',iconSize:[22,22],iconAnchor:[11,11]}),
+    icon:L.divIcon({className:"",html:'<div class="lokasi-saya nav"><span class="gelombang"></span><span class="gelombang g2"></span><span class="gelombang g3"></span><span class="arah"><svg viewBox="0 0 96 96" width="96" height="96"><defs><radialGradient id="gArahNav" cx="48" cy="48" r="46" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF2D2D" stop-opacity=".6"/><stop offset=".55" stop-color="#FF2D2D" stop-opacity=".28"/><stop offset="1" stop-color="#FF2D2D" stop-opacity="0"/></radialGradient></defs><path d="M48 48 L26.4 7.4 A46 46 0 0 1 69.6 7.4 Z" fill="url(#gArahNav)"/><path d="M48 25 L54.5 35.5 L48 33 L41.5 35.5 Z" fill="#FF2D2D" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span class="inti"></span></div>',iconSize:[22,22],iconAnchor:[11,11]}),
     zIndexOffset:3000,interactive:false,keyboard:false}).addTo(NAV.lapis);
+  terapkanArah(true);
   perbaruiNav(true);
 }
 function posisiNav(g){
   if(!NAV||NAV.tiba) return;
   NAV.pos={lat:g.coords.latitude,lng:g.coords.longitude,acc:g.coords.accuracy||0};
+  if(typeof g.coords.heading==="number"&&!isNaN(g.coords.heading)&&(g.coords.speed||0)>1.4){ ARAH.gps=g.coords.heading; jadwalArah(); }
   if(NAV.c) perbaruiNav(false);
 }
 /* Proyeksi posisi ke garis rute: segmen terdekat, posisi di segmen (t) dan jaraknya (meter). */
@@ -1489,7 +1538,7 @@ function hentikanNavigasi(){
   try{ if(NAV.wl) NAV.wl.release(); }catch(e){}
   try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
   if(NAV.lapis) try{ NAV.lapis.remove(); }catch(e){}
-  NAV=null;
+  NAV=null; hentikanKompas();
   document.body.classList.remove("navigasi");
   ["navAtas","navBawah","navTiba","navPusat"].forEach(id=>sembunyi(id,true));
   setTimeout(function(){ if(MAP) MAP.invalidateSize(); PETA_UK.h0=0; ukurPeta(); },60);
