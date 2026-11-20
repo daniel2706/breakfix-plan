@@ -102,6 +102,17 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .pin.urg{box-shadow:0 0 0 4px rgba(168,67,42,.35),0 1px 4px rgba(0,0,0,.4)}
 
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+.cari{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;margin:-4px 0 14px}
+.cari .kotak{position:relative;flex:1 1 280px;min-width:0}
+.cari .ikon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.cari input[type=search]{width:100%;padding:9px 34px 9px 34px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px;-webkit-appearance:none;appearance:none}
+.cari input[type=search]::-webkit-search-cancel-button{display:none}
+.cari #cariHapus{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:28px;height:28px;padding:0;border:none;background:transparent;color:var(--muted);font-size:19px;line-height:1;border-radius:50%;cursor:pointer}
+.cari #cariHapus:hover{background:var(--line-2);color:var(--ink)}
+.cari-info{font-size:12.5px;color:var(--muted)}
+.cari-info.kosong{color:var(--bad)}
+.cari-sembunyi{display:none!important}
+mark.cocok{background:#FCE9A6;color:inherit;border-radius:2px;padding:0 1px}
 @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
 .stat .k{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -410,6 +421,14 @@ ol.stops li.aktif{background:var(--accent-soft)}
         <div class="petunjuk hidden" id="petunjuk"></div>
       </div>
       <div class="stats" id="stats"></div>
+      <div class="cari hidden" id="cariBox">
+        <div class="kotak">
+          <svg class="ikon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 13l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="search" id="cari" placeholder="Cari nama teknisi, outlet, Partner Value, atau nomor WO" autocomplete="off" enterkeyhint="search" aria-label="Cari teknisi atau outlet">
+          <button type="button" id="cariHapus" class="hidden" aria-label="Hapus pencarian">&times;</button>
+        </div>
+        <span class="cari-info" id="cariInfo"></span>
+      </div>
       <div class="routes" id="routes"></div>
     </div>
 
@@ -959,6 +978,60 @@ document.addEventListener("click",function(e){
   }
 },true);
 
+/* ---------- pencarian teknisi / outlet ---------- */
+const normCari=t=>String(t==null?"":t).toLowerCase().replace(/\s+/g," ").trim();
+function teksStop(p){ return normCari([p.nama,p.partner,p.id,p.serial,p.desc].filter(adaIsi).join(" | ")); }
+function tandaiTeks(node,q){
+  // beri <mark> pada teks yang cocok (hanya simpul teks, tanpa mengubah tombol/tautan)
+  const w=document.createTreeWalker(node,NodeFilter.SHOW_TEXT,null), daftar=[];
+  while(w.nextNode()) daftar.push(w.currentNode);
+  daftar.forEach(function(tn){
+    const s=tn.nodeValue, i=s.toLowerCase().indexOf(q); if(i<0||!q) return;
+    const f=document.createDocumentFragment(), m=document.createElement("mark");
+    m.className="cocok"; m.textContent=s.slice(i,i+q.length);
+    f.append(s.slice(0,i),m,s.slice(i+q.length)); tn.replaceWith(f);
+  });
+}
+function bersihTanda(box){ box.querySelectorAll("mark.cocok").forEach(m=>m.replaceWith(m.textContent)); box.normalize(); }
+function saringCari(){
+  const inp=el("cari"), box=el("routes"); if(!inp||!box) return;
+  el("cariBox").classList.toggle("hidden",!ROUTES.length);
+  const q=normCari(inp.value), info=el("cariInfo");
+  el("cariHapus").classList.toggle("hidden",!q);
+  bersihTanda(box);
+  box.querySelectorAll(".cari-sembunyi").forEach(x=>x.classList.remove("cari-sembunyi"));
+  if(!q){ info.textContent=""; info.className="cari-info"; return; }
+  let nTek=0, nOut=0;
+  box.querySelectorAll(".route").forEach(function(c){
+    const r=ROUTES[+c.dataset.ri]; if(!r) return;
+    const cocokTek=normCari(r.nama).indexOf(q)>=0;
+    let ada=0;
+    c.querySelectorAll("li[data-key]").forEach(function(li){
+      const p=r.seq.find(x=>(x.__key||"")===li.dataset.key) || r.seq[[].indexOf.call(li.parentNode.children,li)];
+      const cocok=p&&teksStop(p).indexOf(q)>=0;
+      if(cocok){ ada++; li.querySelectorAll(".txt,.rinci").forEach(n=>tandaiTeks(n,q)); }
+      else if(!cocokTek) li.classList.add("cari-sembunyi");
+    });
+    if(cocokTek){ nTek++; tandaiTeks(c.querySelector(".nm"),q); }
+    if(!cocokTek&&!ada) c.classList.add("cari-sembunyi");
+    nOut+=ada;
+  });
+  const bag=[]; if(nTek) bag.push(nTek+" teknisi"); if(nOut) bag.push(nOut+" outlet");
+  info.textContent=bag.length?bag.join(" · ")+" cocok":"Tidak ada teknisi atau outlet yang cocok.";
+  info.className="cari-info"+(bag.length?"":" kosong");
+}
+function pasangCari(){
+  const inp=el("cari"); if(!inp||inp.dataset.siap) return; inp.dataset.siap="1";
+  inp.addEventListener("input",function(){
+    // di tampilan penonton, keluar dari mode fokus agar semua hasil terlihat
+    if(!ADMIN&&inp.value.trim()&&(FOKUS.ri!=null||FOKUS.key!=null)){
+      FOKUS.ri=null; FOKUS.key=null; hapusJalan(); if(MAP) MAP.closePopup(); terapkanFokus(); gambarPeta();
+    }
+    saringCari();
+  });
+  inp.addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); inp.value=""; saringCari(); } });
+  el("cariHapus").onclick=function(){ inp.value=""; saringCari(); inp.focus(); };
+}
 /* ---------- fokus tampilan penonton ---------- */
 function terapkanFokus(){
   const box=el("routes");
@@ -1222,6 +1295,7 @@ function render(){
       (ORS_AKTIF?'<div class="jalanrow"><button type="button" class="ghost jalanbtn" data-jalan="'+ri+'">Tampilkan rute jalan dari lokasi saya</button><div class="status idle hidden" id="jl'+ri+'"></div></div>':'')+
       '<ol class="stops">'+(li||'<li><span class="txt"><span class="t2">Tidak ada outlet</span></span></li>')+'</ol></div>';
   }).join("");
+  saringCari();
 
   if(ADMIN){
     el("routes").querySelectorAll("[data-reopt]").forEach(b=>b.onclick=function(){
@@ -1724,7 +1798,7 @@ function mulaiAdmin(B){
 
 /* ---------- mulai ---------- */
 document.addEventListener("DOMContentLoaded",function(){
-  pasangLogin(); pasangFokus();
+  pasangLogin(); pasangFokus(); pasangCari();
   if(window.BOOT) return mulai(window.BOOT);
   // Versi GitHub Pages: info awal diambil dari API.
   el("lede").textContent="Menghubungkan…";
