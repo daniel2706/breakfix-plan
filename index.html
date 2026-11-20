@@ -279,6 +279,42 @@ body.penonton .layout.solo #map{height:clamp(240px,44vh,520px);transition:none}
 .sheet-aksi .utama{background:var(--accent);color:#fff}
 .sheet-aksi .kedua{background:var(--accent-soft);color:var(--accent-ink)}
 body.sheet-buka{overflow:hidden}
+/* ---- mode navigasi ---- */
+.sheet-mulai{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:none;padding:0;display:grid;place-items:center;cursor:pointer;background:#1A73E8;color:#fff}
+.sheet-mulai:active{filter:brightness(.92)}
+.sheet-arah{background:var(--accent-soft)!important;color:var(--accent)!important}
+body.navigasi{overflow:hidden}
+body.navigasi .peta-wrap{position:fixed!important;inset:0;z-index:1200;margin:0!important;padding:0!important;background:#e9e6df;box-shadow:none}
+body.navigasi #map{height:100%!important;border-radius:0;border:none}
+body.navigasi #petunjuk,body.navigasi #cariBox,body.navigasi .leaflet-control-zoom{display:none}
+body.navigasi .leaflet-bottom{bottom:86px}
+.nav-atas{position:fixed;left:10px;right:10px;top:10px;z-index:1300;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;
+  background:#0F6B4E;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.nav-ikon{flex-shrink:0;width:46px;height:46px;display:grid;place-items:center}
+.nav-ikon svg{width:42px;height:42px}
+.nav-teks{min-width:0;flex:1}
+.nav-jarak{font-size:24px;font-weight:800;line-height:1.1;letter-spacing:-.01em}
+.nav-instr{font-size:15px;line-height:1.3;margin-top:2px;overflow-wrap:anywhere}
+.nav-atas.sibuk{background:#3B4A55}
+.nav-atas.galat{background:#A8322B}
+.nav-bawah{position:fixed;left:0;right:0;bottom:0;z-index:1300;display:flex;align-items:center;gap:10px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+  background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.18)}
+.nav-sisa{flex:1;min-width:0}
+.nav-sisa b{display:block;font-size:20px;color:#0F7B3E;line-height:1.15}
+.nav-sisa span{font-size:13px;color:var(--muted)}
+.nav-suara{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--paper);display:grid;place-items:center;padding:0;cursor:pointer;color:var(--ink)}
+.nav-suara svg{width:22px;height:22px}
+.nav-selesai{height:44px;padding:0 18px;border-radius:22px;border:none;background:#D93025;color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+.nav-pusat{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:1300;padding:9px 18px;border-radius:22px;border:none;
+  background:#fff;color:#1A73E8;font-weight:700;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,.25);cursor:pointer;font-family:inherit}
+.nav-tiba{position:fixed;left:0;right:0;bottom:0;z-index:1350;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.22);
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+.nav-tiba h3{margin:0 0 4px;font-size:19px}
+.nav-tiba p{margin:0 0 14px;color:var(--muted);font-size:14px}
+.nav-tiba .tbl{display:grid;gap:8px}
+.nav-tiba button{min-height:46px;padding:10px 14px;line-height:1.3;border-radius:10px;border:none;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}
+.nav-tiba .lanjut{background:#1A73E8;color:#fff}
+.nav-tiba .akhir{background:var(--line-2);color:var(--ink)}
 /* ---- tampilan penonton: peta menempel, fokus teknisi & outlet ---- */
 .layout.solo .peta-wrap{position:sticky;top:0;z-index:5;background:var(--paper);padding:8px 0 6px;margin-top:-8px}
 .layout.solo #map{height:clamp(240px,44vh,520px)}
@@ -933,6 +969,7 @@ function siapkanPeta(){
   LAYER=L.layerGroup().addTo(MAP);
   // Ketuk peta (bukan geser) = kembali satu langkah, hanya di tampilan penonton.
   MAP.on("click",function(){ if(!ADMIN) kembali(); });
+  pasangNavPeta();
 }
 function gambarPeta(tanpaFit){
   if(!MAP) return;
@@ -1134,7 +1171,7 @@ function pasangCari(){
 /* ---------- penonton: peta besar yang mengecil saat digulir ---------- */
 const PETA_UK={h0:0,min:0,w:0,ih:0,raf:0,inv:0};
 function ukurPeta(){
-  const m=el("map"); if(!m) return;
+  const m=el("map"); if(!m||NAV) return;
   if(ADMIN||!ROUTES.length){ m.style.height=""; PETA_UK.h0=0; return; }
   const ih=window.innerHeight, w=window.innerWidth;
   // abaikan perubahan tinggi kecil akibat bilah alamat browser HP yang muncul/hilang
@@ -1230,6 +1267,250 @@ function pasangDetail(){
   el("sheetArah").onclick=arahKeOutlet;
   window.addEventListener("popstate",function(){ if(SHEET_HIST){ SHEET_HIST=false; tutupDetail(true); } });
 }
+/* ---------- navigasi belokan demi belokan (penonton) ----------
+   Rute dari lokasi HP ke outlet dihitung server (Valhalla, profil motor). Posisi diikuti lewat GPS,
+   petunjuk belokan ditampilkan di banner atas (dan dibacakan bila suara aktif), rute dihitung ulang
+   bila keluar jalur, layar dijaga tetap menyala. */
+let NAV=null;
+const SVG_SUARA_ON='<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+const SVG_SUARA_OFF='<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/></svg>';
+function jarakM(a,b){
+  const r=Math.PI/180, dLat=(b[0]-a[0])*r, dLng=(b[1]-a[1])*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLng/2)**2;
+  return 2*6371000*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+function arahDeg(a,b){
+  const r=Math.PI/180, y=Math.sin((b[1]-a[1])*r)*Math.cos(b[0]*r);
+  const x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);
+  return (Math.atan2(y,x)/r+360)%360;
+}
+/* Cadangan bila server belum mengirim langkah belokan: belokan dibaca dari perubahan arah garis rute. */
+function langkahDariGaris(c){
+  const cum=[0]; for(let i=1;i<c.length;i++) cum[i]=cum[i-1]+jarakM(c[i-1],c[i]);
+  const out=[[1,0,"",0]]; let akhir=0;
+  for(let i=1;i<c.length-1;i++){
+    let a=i-1; while(a>0&&cum[i]-cum[a]<15) a--;
+    let b=i+1; while(b<c.length-1&&cum[b]-cum[i]<15) b++;
+    if(cum[i]-cum[a]<4||cum[b]-cum[i]<4) continue;
+    let d=arahDeg(c[i],c[b])-arahDeg(c[a],c[i]); d=((d+540)%360)-180;
+    const ad=Math.abs(d); if(ad<35) continue;
+    if(out.length>1&&cum[i]-cum[akhir]<30) continue;
+    out.push([ad>=150?(d>0?12:13):ad>=110?(d>0?11:14):ad>=55?(d>0?10:15):(d>0?9:16),i,"",0]); akhir=i;
+  }
+  out.push([4,c.length-1,"",0]);
+  return out;
+}
+function teksLangkah(m){
+  const t=m[0], jl=m[2]?String(m[2]):"", ke=jl?" ke "+jl:"";
+  switch(t){
+    case 1: case 2: case 3: return "Berangkat"+(jl?" melalui "+jl:"");
+    case 4: return "Tiba di tujuan"; case 5: return "Tujuan di sebelah kanan"; case 6: return "Tujuan di sebelah kiri";
+    case 7: case 8: case 17: case 22: return "Lurus terus"+ke;
+    case 9: return "Agak ke kanan"+ke; case 16: return "Agak ke kiri"+ke;
+    case 10: return "Belok kanan"+ke; case 15: return "Belok kiri"+ke;
+    case 11: return "Belok tajam ke kanan"+ke; case 14: return "Belok tajam ke kiri"+ke;
+    case 12: case 13: return "Putar balik"+ke;
+    case 18: case 20: case 23: return "Ambil jalur kanan"+ke;
+    case 19: case 21: case 24: return "Ambil jalur kiri"+ke;
+    case 25: case 37: case 38: return "Bergabung"+ke;
+    case 26: return "Masuk bundaran"+(m[3]?", ambil jalan keluar ke-"+m[3]:"")+ke;
+    case 27: return "Keluar dari bundaran"+ke;
+    case 28: return "Naik kapal feri"+ke; case 29: return "Turun dari kapal feri"+ke;
+    default: return "Lanjutkan"+ke;
+  }
+}
+function ikonLangkah(t){
+  if(t>=4&&t<=6) return '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>';
+  if(t===12||t===13) return '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M8 21V10a4 4 0 0 1 8 0v4"/><path fill="currentColor" d="M12 13h8l-4 5z"/></svg>';
+  if(t===26||t===27) return '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="4.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M12 22v-4.5M15.2 9.8 19 6"/><path fill="currentColor" d="M20.5 3.5v6l-6-6z"/></svg>';
+  const sudut={9:45,10:90,11:135,16:-45,15:-90,14:-135,18:30,20:30,23:30,19:-30,21:-30,24:-30,37:30,38:-30}[t]||0;
+  return '<svg viewBox="0 0 24 24"><g transform="rotate('+sudut+' 12 13)"><path fill="currentColor" d="M12 2.5 19 10h-4.5v11h-5V10H5z"/></g></svg>';
+}
+function fmtM(m){
+  if(m>=1000) return (m/1000).toFixed(m>=10000?0:1).replace(".",",")+" km";
+  if(m>=300) return Math.round(m/50)*50+" m";
+  return Math.max(0,Math.round(m/10)*10)+" m";
+}
+function ucapM(m){ return m>=1000?(m/1000).toFixed(1).replace(".0","").replace("."," koma ")+" kilometer":(Math.round(m/50)*50||Math.round(m/10)*10)+" meter"; }
+function ucap(t){
+  if(!NAV||!NAV.suara||!window.speechSynthesis) return;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(t); u.lang="id-ID"; u.rate=1;
+    const v=speechSynthesis.getVoices().find(x=>/^id/i.test(x.lang)); if(v) u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function navUI(kelas,ikon,jarak,instr){
+  const a=el("navAtas"); a.className="nav-atas"+(kelas?" "+kelas:"");
+  el("navIkon").innerHTML=ikon||""; el("navJarak").textContent=jarak||""; el("navInstr").textContent=instr||"";
+}
+function tulisSuara(){ el("navSuara").innerHTML=NAV&&NAV.suara?SVG_SUARA_ON:SVG_SUARA_OFF; el("navSuara").setAttribute("aria-pressed",NAV&&NAV.suara?"true":"false"); }
+async function kunciLayar(){
+  try{ if(NAV&&"wakeLock" in navigator&&document.visibilityState==="visible") NAV.wl=await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function mulaiNavigasi(ri,key){
+  const r=ROUTES[ri], p=r&&r.seq.find(x=>(x.__key||"")===key); if(!p) return;
+  if(!ORS_AKTIF){
+    window.open("https://www.google.com/maps/dir/?api=1&destination="+p.lat+","+p.lng+"&travelmode=driving&dir_action=navigate","_blank","noopener");
+    return;
+  }
+  if(NAV) hentikanNavigasi();
+  tutupDetail(); hapusJalan(); if(MAP) MAP.closePopup();
+  let suara=true; try{ suara=localStorage.getItem("bfNavSuara")!=="0"; }catch(e){}
+  NAV={ri:ri,key:key,p:p,suara:suara,ikuti:true,zoom:17,seg:0,diucap:{},luar:0,ulangPada:0,sibuk:false,ver:0,watch:null,wl:null};
+  document.body.classList.add("navigasi");
+  ["navAtas","navBawah"].forEach(id=>sembunyi(id,false)); sembunyi("navTiba",true); sembunyi("navPusat",true);
+  tulisSuara(); navUI("sibuk","","Membaca lokasi HP…",p.nama);
+  el("navWaktu").textContent="—"; el("navInfo").textContent="ke "+p.nama;
+  setTimeout(function(){ if(MAP) MAP.invalidateSize(); },60);
+  ucap("Memulai navigasi ke "+p.nama);
+  kunciLayar();
+  lokasiSaya().then(function(me){
+    if(!NAV) return;
+    NAV.pos={lat:me.lat,lng:me.lng,acc:0};
+    navUI("sibuk","","Menghitung rute…",p.nama);
+    return mintaRuteNav();
+  }).then(function(){
+    if(!NAV||NAV.watch!=null) return;
+    NAV.watch=navigator.geolocation.watchPosition(posisiNav,function(e){
+      if(NAV&&e.code===1) navUI("galat","","Izin lokasi ditolak","Izinkan akses lokasi untuk situs ini, lalu mulai lagi.");
+    },{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  }).catch(function(e){
+    if(NAV) navUI("galat","","Navigasi gagal",(e&&e.message)||String(e));
+  });
+}
+function mintaRuteNav(){
+  NAV.sibuk=true;
+  const asal=NAV.pos, p=NAV.p;
+  return panggil("apiRuteJalan",tokenAmbil(),[[asal.lat,asal.lng],[p.lat,p.lng]]).then(function(j){
+    if(!NAV) return;
+    NAV.sibuk=false; pasangRuteNav(j);
+  },function(e){ if(NAV) NAV.sibuk=false; throw e; });
+}
+function pasangRuteNav(j){
+  const c=j.c||[]; if(c.length<2) throw new Error("Rute tidak ditemukan.");
+  const cum=[0]; for(let i=1;i<c.length;i++) cum[i]=cum[i-1]+jarakM(c[i-1],c[i]);
+  NAV.c=c; NAV.cum=cum; NAV.total=Math.max(1,cum[cum.length-1]); NAV.menit=j.menit||0;
+  NAV.m=((j.m&&j.m.length)?j.m:langkahDariGaris(c)).filter(x=>x[1]<c.length).sort((a,b)=>a[1]-b[1]);
+  NAV.seg=0; NAV.diucap={}; NAV.ver++; NAV.luar=0;
+  if(NAV.lapis){ try{ NAV.lapis.remove(); }catch(e){} }
+  NAV.lapis=L.layerGroup().addTo(MAP);
+  NAV.garis=[
+    L.polyline(c,{color:"#ffffff",weight:13,opacity:.95,interactive:false}).addTo(NAV.lapis),
+    L.polyline(c,{color:"#FF2D2D",weight:7,opacity:1,className:"jalan-glow",interactive:false}).addTo(NAV.lapis),
+    L.polyline(c,{color:"#FFE3E3",weight:3,opacity:.95,className:"jalan-alir",interactive:false}).addTo(NAV.lapis)
+  ];
+  NAV.saya=L.marker([NAV.pos.lat,NAV.pos.lng],{
+    icon:L.divIcon({className:"",html:'<div class="lokasi-saya"><span class="gelombang"></span><span class="gelombang g2"></span><span class="gelombang g3"></span><span class="inti"></span></div>',iconSize:[22,22],iconAnchor:[11,11]}),
+    zIndexOffset:3000,interactive:false,keyboard:false}).addTo(NAV.lapis);
+  perbaruiNav(true);
+}
+function posisiNav(g){
+  if(!NAV||NAV.tiba) return;
+  NAV.pos={lat:g.coords.latitude,lng:g.coords.longitude,acc:g.coords.accuracy||0};
+  if(NAV.c) perbaruiNav(false);
+}
+/* Proyeksi posisi ke garis rute: segmen terdekat, posisi di segmen (t) dan jaraknya (meter). */
+function proyeksi(p,a,b){
+  const k=Math.cos(p[0]*Math.PI/180)*111320, q=110540;
+  const ax=(a[1]-p[1])*k, ay=(a[0]-p[0])*q, bx=(b[1]-p[1])*k, by=(b[0]-p[0])*q;
+  const dx=bx-ax, dy=by-ay, L2=dx*dx+dy*dy;
+  let t=L2?-(ax*dx+ay*dy)/L2:0; t=Math.max(0,Math.min(1,t));
+  const x=ax+t*dx, y=ay+t*dy; return {t:t,d:Math.sqrt(x*x+y*y)};
+}
+function perbaruiNav(awal){
+  const c=NAV.c, n=c.length, pos=[NAV.pos.lat,NAV.pos.lng];
+  const cari=function(dari,sampai){ let best={i:0,t:0,d:Infinity};
+    for(let i=dari;i<=sampai;i++){ const pr=proyeksi(pos,c[i],c[i+1]); if(pr.d<best.d) best={i:i,t:pr.t,d:pr.d}; } return best; };
+  let b=cari(Math.max(0,NAV.seg-3),Math.min(n-2,NAV.seg+150));
+  if(b.d>40) b=cari(0,n-2);
+  NAV.seg=b.i;
+  const sepanjang=NAV.cum[b.i]+b.t*(NAV.cum[b.i+1]-NAV.cum[b.i]);
+  const sisa=Math.max(0,NAV.total-sepanjang);
+  const titikPas=[c[b.i][0]+(c[b.i+1][0]-c[b.i][0])*b.t, c[b.i][1]+(c[b.i+1][1]-c[b.i][1])*b.t];
+  const sisaGaris=[titikPas].concat(c.slice(b.i+1));
+  NAV.garis.forEach(g=>g.setLatLngs(sisaGaris));
+  NAV.saya.setLatLng(b.d<25?titikPas:pos);
+  // tiba
+  const keTujuan=jarakM(pos,[NAV.p.lat,NAV.p.lng]);
+  if(!awal&&(sisa<30||keTujuan<40)) return tibaNav();
+  // keluar jalur → hitung ulang
+  if(!awal&&b.d>50&&(NAV.pos.acc||0)<80){
+    NAV.luar++;
+    if(NAV.luar>=2&&!NAV.sibuk&&Date.now()-NAV.ulangPada>15000){
+      NAV.ulangPada=Date.now();
+      navUI("sibuk","","Menghitung ulang rute…","Anda keluar dari jalur");
+      ucap("Menghitung ulang rute");
+      mintaRuteNav().catch(function(e){ if(NAV) navUI("galat","","Gagal menghitung ulang",(e&&e.message)||String(e)); });
+      return;
+    }
+  } else NAV.luar=0;
+  // langkah berikutnya
+  let k=NAV.m.findIndex(m=>m[1]>b.i&&!(m[0]>=1&&m[0]<=3));
+  if(k<0) k=NAV.m.length-1;
+  const m=NAV.m[k], keLangkah=Math.max(0,NAV.cum[Math.min(m[1],n-1)]-sepanjang);
+  if(!NAV.sibuk) navUI("",ikonLangkah(m[0]),fmtM(keLangkah),teksLangkah(m));
+  // suara: sekali di ±500 m, ±150 m, dan saat tiba di titik belokan
+  const kunci=NAV.ver+":"+k, sdh=NAV.diucap[kunci]||(NAV.diucap[kunci]={});
+  const kalimat=teksLangkah(m);
+  if(awal){ sdh.jauh=sdh.dekat=keLangkah<=150; ucap((keLangkah>60?"Dalam "+ucapM(keLangkah)+", ":"")+kalimat.toLowerCase()); }
+  else if(keLangkah<=35&&!sdh.kini){ sdh.kini=sdh.dekat=sdh.jauh=true; ucap(kalimat); }
+  else if(keLangkah<=170&&!sdh.dekat){ sdh.dekat=sdh.jauh=true; ucap("Dalam "+ucapM(keLangkah)+", "+kalimat.toLowerCase()); }
+  else if(keLangkah<=550&&keLangkah>300&&!sdh.jauh){ sdh.jauh=true; ucap("Dalam "+ucapM(keLangkah)+", "+kalimat.toLowerCase()); }
+  // panel bawah
+  const menitSisa=NAV.menit*sisa/NAV.total, jam=new Date(Date.now()+menitSisa*60000);
+  el("navWaktu").textContent=durJalan(Math.max(1,menitSisa));
+  el("navInfo").textContent=fmtM(sisa)+" · tiba "+String(jam.getHours()).padStart(2,"0")+"."+String(jam.getMinutes()).padStart(2,"0")+" · "+NAV.p.nama;
+  // peta mengikuti posisi; posisi ditaruh agak ke bawah agar jalan di depan lebih terlihat
+  if(NAV.ikuti&&MAP){
+    const z=awal?17:NAV.zoom, h=el("map").clientHeight||600;
+    const pusat=MAP.unproject(MAP.project(L.latLng(pos[0],pos[1]),z).subtract([0,h*0.18]),z);
+    MAP.setView(pusat,z,{animate:!awal});
+  }
+}
+function tibaNav(){
+  NAV.tiba=true;
+  if(NAV.watch!=null){ navigator.geolocation.clearWatch(NAV.watch); NAV.watch=null; }
+  const r=ROUTES[NAV.ri], i=r?r.seq.findIndex(x=>(x.__key||"")===NAV.key):-1, lanjut=r&&i>=0?r.seq[i+1]:null;
+  navUI("",ikonLangkah(4),"Sudah sampai",NAV.p.nama);
+  ucap("Anda telah sampai di "+NAV.p.nama);
+  sembunyi("navBawah",true); sembunyi("navPusat",true);
+  const t=el("navTiba"); sembunyi("navTiba",false);
+  t.innerHTML='<h3>Anda sudah sampai</h3><p>'+esc(NAV.p.nama)+(NAV.p.id&&NAV.p.id!=="URGENT"?' · WO '+esc(NAV.p.id):'')+'</p><div class="tbl">'+
+    (lanjut?'<button type="button" class="lanjut" id="navLanjut">Lanjut ke outlet berikutnya: '+esc(lanjut.nama)+'</button>':'')+
+    '<button type="button" class="akhir" id="navAkhir">Selesai</button></div>';
+  if(lanjut) el("navLanjut").onclick=function(){ const ri=NAV.ri; hentikanNavigasi(); mulaiNavigasi(ri,lanjut.__key); };
+  el("navAkhir").onclick=function(){ hentikanNavigasi(); };
+}
+function hentikanNavigasi(){
+  if(!NAV) return;
+  if(NAV.watch!=null) try{ navigator.geolocation.clearWatch(NAV.watch); }catch(e){}
+  try{ if(NAV.wl) NAV.wl.release(); }catch(e){}
+  try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+  if(NAV.lapis) try{ NAV.lapis.remove(); }catch(e){}
+  NAV=null;
+  document.body.classList.remove("navigasi");
+  ["navAtas","navBawah","navTiba","navPusat"].forEach(id=>sembunyi(id,true));
+  setTimeout(function(){ if(MAP) MAP.invalidateSize(); PETA_UK.h0=0; ukurPeta(); },60);
+}
+function pasangNavigasi(){
+  if(!el("navAtas")||el("navAtas").dataset.siap) return; el("navAtas").dataset.siap="1";
+  el("sheetMulai").onclick=function(){ if(SHEET_DATA) mulaiNavigasi(SHEET_DATA.ri,SHEET_DATA.key); };
+  el("navSelesai").onclick=function(){ hentikanNavigasi(); };
+  el("navSuara").onclick=function(){
+    if(!NAV) return; NAV.suara=!NAV.suara; tulisSuara();
+    try{ localStorage.setItem("bfNavSuara",NAV.suara?"1":"0"); }catch(e){}
+    if(NAV.suara) ucap("Suara petunjuk aktif"); else try{ speechSynthesis.cancel(); }catch(e){}
+  };
+  el("navPusat").onclick=function(){ if(!NAV) return; NAV.ikuti=true; sembunyi("navPusat",true); if(NAV.c&&!NAV.tiba) perbaruiNav(false); };
+  document.addEventListener("visibilitychange",function(){ if(NAV&&document.visibilityState==="visible") kunciLayar(); });
+}
+function pasangNavPeta(){
+  if(!MAP||MAP._navSiap) return; MAP._navSiap=true;
+  MAP.on("dragstart",function(){ if(NAV&&!NAV.tiba){ NAV.ikuti=false; sembunyi("navPusat",false); } });
+  MAP.on("zoomend",function(){ if(NAV) NAV.zoom=MAP.getZoom(); });
+}
 /* ---------- fokus tampilan penonton ---------- */
 function terapkanFokus(){
   const box=el("routes");
@@ -1268,6 +1549,7 @@ function pusatkanTitik(t){
 }
 /* Kembali satu langkah: outlet → teknisi (atau tampilan awal) → tampilan awal. */
 function kembali(){
+  if(NAV) return;
   if(FOKUS.key!=null){ FOKUS.key=null; if(FOKUS.dariSemua) FOKUS.ri=null; }
   else if(FOKUS.ri!=null){ FOKUS.ri=null; }
   else return;
@@ -1277,7 +1559,7 @@ function kembali(){
 }
 function pasangFokus(){
   document.addEventListener("click",function(e){
-    if(ADMIN||!ROUTES.length) return;
+    if(ADMIN||!ROUTES.length||NAV) return;
     const t=e.target;
     if(t.closest("#sheet")) return;
     if(t.closest("#map")) return;                       // peta ditangani Leaflet (geser ≠ ketuk)
@@ -2094,7 +2376,7 @@ function mulaiAdmin(B){
 
 /* ---------- mulai ---------- */
 document.addEventListener("DOMContentLoaded",function(){
-  pasangLogin(); pasangFokus(); pasangCari(); pasangDetail();
+  pasangLogin(); pasangFokus(); pasangCari(); pasangDetail(); pasangNavigasi();
   if(window.BOOT) return mulai(window.BOOT);
   // Versi GitHub Pages: info awal diambil dari API.
   el("lede").textContent="Menghubungkan…";
@@ -2120,6 +2402,19 @@ function mulai(B){
 </script>
 
 
+  <!-- ============ NAVIGASI (penonton) ============ -->
+  <div class="nav-atas hidden" id="navAtas" role="status" aria-live="polite">
+    <div class="nav-ikon" id="navIkon"></div>
+    <div class="nav-teks"><div class="nav-jarak" id="navJarak"></div><div class="nav-instr" id="navInstr"></div></div>
+  </div>
+  <button type="button" class="nav-pusat hidden" id="navPusat">Pusatkan</button>
+  <div class="nav-bawah hidden" id="navBawah">
+    <div class="nav-sisa"><b id="navWaktu"></b><span id="navInfo"></span></div>
+    <button type="button" class="nav-suara" id="navSuara" aria-label="Suara petunjuk" title="Suara petunjuk"></button>
+    <button type="button" class="nav-selesai" id="navSelesai">Selesai</button>
+  </div>
+  <div class="nav-tiba hidden" id="navTiba"></div>
+
   <!-- ============ DETAIL WORK ORDER (penonton) ============ -->
   <div class="sheet hidden" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetJudul">
     <div class="sheet-bg" id="sheetBg"></div>
@@ -2127,6 +2422,7 @@ function mulai(B){
       <div class="sheet-hd">
         <div class="sheet-judul" id="sheetJudul"></div>
         <button type="button" class="sheet-arah" id="sheetArah" aria-label="Petunjuk arah ke outlet ini" title="Petunjuk arah"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg></button>
+        <button type="button" class="sheet-mulai" id="sheetMulai" aria-label="Mulai navigasi ke outlet ini" title="Mulai navigasi"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 2 4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg></button>
         <button type="button" class="sheet-x" id="sheetTutup" aria-label="Tutup">&times;</button>
       </div>
       <div class="sheet-bd" id="sheetBd"></div>
