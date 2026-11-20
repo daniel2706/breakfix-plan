@@ -93,6 +93,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .drop b{display:block;color:var(--ink);font-size:14px;margin-bottom:3px}
 .drop{position:relative}
 .drop input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.rinci-saja{position:relative;margin-top:9px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);
+  font-size:13px;font-weight:600;color:var(--accent-ink);text-align:center;cursor:pointer}
+.rinci-saja:hover{border-color:var(--accent)}
+.rinci-saja input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
 
 #map{height:clamp(400px,58vh,640px);border-radius:var(--r);border:1px solid var(--line);
   box-shadow:var(--shadow);z-index:1}
@@ -353,6 +357,11 @@ ol.stops li.aktif{background:var(--accent-soft)}
             atau klik untuk pilih berkas
             <input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV">
           </div>
+          <div class="rinci-saja hidden" id="rinciSajaBox">
+            <span>&#8635; Perbarui rincian saja — rute tetap</span>
+            <input type="file" id="fileRinci" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV untuk memperbarui rincian outlet">
+          </div>
+          <div class="hint hidden" id="rinciSajaHint">Mencocokkan nomor WO (Order) dengan rencana sekarang lalu mengisi ulang rincian seperti STATUS-2, deskripsi, alamat, dan Partner Value. Urutan dan pembagian rute tidak berubah.</div>
           <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
           <div id="peta"></div>
         </div>
@@ -1494,6 +1503,7 @@ function render(){
   }).join("")+kartuNonaktif();
   saringCari();
   if(!ADMIN) setTimeout(ukurPeta,0);
+  if(ADMIN&&el("rinciSajaBox")){ sembunyi("rinciSajaBox",!ROUTES.length); sembunyi("rinciSajaHint",!ROUTES.length); }
 
   if(ADMIN){
     el("routes").querySelectorAll("[data-reopt]").forEach(b=>b.onclick=function(){
@@ -1730,8 +1740,9 @@ function setStops(rows,pesan){
   note("ok",pesan||("<b>"+STOPS.length+" outlet</b> dimuat."));
   ROUTES=[]; compute();
 }
-function handleFile(f){
+function handleFile(f,rinciSaja){
   if(!f) return;
+  UNGGAH_RINCI=!!rinciSaja;
   const r=new FileReader();
   r.onload=function(){
     try{
@@ -1775,7 +1786,7 @@ function tampilPemetaan(l,hilang){
       '<select id="pk_'+f.k+'" data-k="'+f.k+'">'+opsi(f.k)+'</select>').join("")+'</div>'+
     '<div class="btnrow" style="margin-top:11px"><button class="primary" id="pkOk">Lanjutkan &amp; ingat pola</button><button class="ghost" id="pkBatal">Batal</button></div>';
   note("warn","Format berkas berbeda dari template — periksa pemetaan kolom di panel <b>1 · Daftar outlet</b>.");
-  el("pkBatal").onclick=function(){ el("peta").innerHTML=""; note("warn","Unggahan dibatalkan."); };
+  el("pkBatal").onclick=function(){ UNGGAH_RINCI=false; el("peta").innerHTML=""; note("warn","Unggahan dibatalkan."); };
   el("pkOk").onclick=function(){
     const baru={};
     el("peta").querySelectorAll("select[data-k]").forEach(function(s){ if(s.value!=="") baru[s.dataset.k]=+s.value; });
@@ -1786,7 +1797,37 @@ function tampilPemetaan(l,hilang){
     prosesLembar(l,baru);
   };
 }
+/* "Perbarui rincian saja": rincian outlet diisi ulang dari berkas, dicocokkan per nomor WO; rute tidak diubah. */
+let UNGGAH_RINCI=false;
+const kunciWO=v=>String(v==null?"":v).trim().replace(/\.0+$/,"").toUpperCase();
+function perbaruiRincian(l,peta){
+  const baris=buildFromRows(l.rows,l.judul.i,peta);
+  const dariBerkas={};
+  baris.forEach(function(b){ const k=kunciWO(b.id); if(k) dariBerkas[k]=b; });
+  let cocok=0, adaCatatan=0; const tidakAda=[], terpakai={};
+  STOPS.forEach(function(p){
+    const k=kunciWO(p.id), b=dariBerkas[k];
+    if(!b){ tidakAda.push(p); return; }
+    terpakai[k]=1; cocok++;
+    RINCI.forEach(function(f){ if(b[f]) p[f]=b[f]; });
+    if(b.catatan) adaCatatan++;
+  });
+  const baru=Object.keys(dariBerkas).filter(k=>!terpakai[k]).length;
+  if(!cocok){ note("bad","<b>Tidak ada nomor WO yang cocok</b> antara berkas <b>"+esc(l.nama)+"</b> dan rencana sekarang. Rincian tidak diubah."); return; }
+  render();
+  note(tidakAda.length||baru?"warn":"ok",
+    "<b>Rincian "+cocok+" outlet diperbarui</b> dari lembar <b>"+esc(l.nama)+"</b>"+(adaCatatan?" ("+adaCatatan+" dengan catatan STATUS-2)":"")+". Rute tidak berubah."+
+    (tidakAda.length?"<br>"+tidakAda.length+" outlet di rencana tidak ada di berkas: "+tidakAda.slice(0,8).map(p=>esc(p.nama)+" (WO "+esc(p.id)+")").join("; ")+(tidakAda.length>8?"; …":"")+".":"")+
+    (baru?"<br>"+baru+" WO di berkas tidak ada di rencana dan diabaikan — tambahkan lewat <b>Outlet urgent</b> bila perlu.":"")+
+    "<br>Tekan <b>Terbitkan</b> agar teknisi melihat rincian terbaru.");
+  panggil("apiSimpanOutlet",KUNCI,STOPS.map(function(p){
+      const o={nama:p.nama,lat:p.lat,lng:p.lng,id:p.id,servis:p.servis};
+      RINCI.forEach(k=>{ if(p[k]) o[k]=p[k]; });
+      return o;
+    })).catch(e=>note("warn","Rincian tampil, tetapi gagal disimpan ke tab Outlet: "+esc(e.message)));
+}
 function prosesLembar(l,peta){
+  if(UNGGAH_RINCI){ UNGGAH_RINCI=false; return perbaruiRincian(l,peta); }
   const st=buildFromRows(l.rows,l.judul.i,peta);
   if(!st.length){ note("bad","<b>Tidak ada baris dengan koordinat yang sah</b> di lembar "+esc(l.nama)+". Periksa kolom koordinatnya."); return; }
   const lw=st.__lewat||[];
@@ -1959,6 +2000,7 @@ function mulaiAdmin(B){
     drop.ondragleave=()=>drop.classList.remove("over");
     drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");handleFile(e.dataTransfer.files[0])};
     file.onchange=function(){ const f=file.files[0]; file.value=""; handleFile(f); };
+    el("fileRinci").onchange=function(){ const f=this.files[0]; this.value=""; handleFile(f,true); };
 
     el("nTek").onchange=function(){ gambarTek(); if(STOPS.length>1) compute(); };
     el("minWO").onchange=function(){ if(STOPS.length>1) compute(); };
