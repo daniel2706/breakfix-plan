@@ -122,6 +122,12 @@ mark.cocok{background:#FCE9A6;color:inherit;border-radius:2px;padding:0 1px}
 .routes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:14px;margin-top:16px}
 .route{min-width:0}
 ol.stops .t1 .pv{font-family:ui-monospace,monospace;font-weight:500;font-size:12px;color:var(--muted);margin-left:6px}
+.route.nonaktif{background:var(--paper);box-shadow:none;border-style:dashed;align-self:start}
+.route.nonaktif .rh .nm{color:var(--muted)}
+.route.nonaktif ol.stops li .txt,.route.nonaktif ol.stops li .rinci{opacity:.55}
+.route.nonaktif ol.stops .t1{text-decoration:line-through;text-decoration-color:rgba(0,0,0,.35)}
+.route.nonaktif .no{background:#B7BFBB!important}
+.pin.mati{background:#fff!important;color:#9AA5A0;border:2px dashed #9AA5A0;box-shadow:none;font-size:13px}
 .route{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
 .route .rh{padding:11px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:9px}
 .route .rh i{width:12px;height:12px;border-radius:3px;flex:none}
@@ -785,10 +791,11 @@ function cfg(){
     maxArea: Math.max(1,v("maxArea",20))
   };
 }
+const aktif=()=>STOPS.filter(p=>!p.nonaktif);
 function teknisiEfektif(){
   const diminta=Math.max(1,Math.min(MAKS_TEK,parseInt(el("nTek")?el("nTek").value:3)||3));
   const min=Math.max(1,parseInt(el("minWO")?el("minWO").value:5)||5);
-  const n=STOPS.length;
+  const n=aktif().length;
   if(!n) return {dipakai:diminta,diminta:diminta,min:min,kurang:false};
   const dipakai=Math.min(diminta,Math.max(1,Math.floor(n/min)));
   return {dipakai:dipakai,diminta:diminta,min:min,kurang:n<min};
@@ -817,7 +824,7 @@ function fmtDur(m){ const h=Math.floor(m/60),x=Math.round(m%60); return h?h+" j 
 /* ---------- hitung ---------- */
 function compute(){
   const c=cfg();
-  const groups=tightClusters(STOPS,c.k,{maxKm:c.maxArea,minWO:teknisiEfektif().min});
+  const groups=tightClusters(aktif(),c.k,{maxKm:c.maxArea,minWO:teknisiEfektif().min});
   ROUTES=groups.map(function(g,i){
     return { nama: NAMA_TEK[i] || ("Teknisi "+(i+1)), color: warnaTek(i), seq: solve(g) };
   });
@@ -876,6 +883,12 @@ function gambarPeta(tanpaFit){
       if(!ADMIN) m.on("click",function(){ fokusTitik(ri,key); });
       PENANDA[key]={m:m,lat:p.lat,lng:p.lng};
     });
+  });
+  if(ADMIN) STOPS.filter(p=>p.nonaktif).forEach(function(p){
+    const ic=L.divIcon({className:"",html:'<div class="pin mati" style="width:22px;height:22px">×</div>',iconSize:[22,22],iconAnchor:[11,11]});
+    L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:-800}).addTo(LAYER)
+      .bindPopup('<b>'+esc(namaPV(p))+'</b><br><span style="color:#75857D">Nonaktif — tidak dikunjungi'+(p.dariTek?' (sebelumnya '+esc(p.dariTek)+')':'')+'</span>'+
+                 (p.id&&p.id!=="URGENT"?'<br>WO '+esc(p.id):''));
   });
   if(tanpaFit) return;
   const target=dipilih.length?dipilih:semua;
@@ -1003,7 +1016,7 @@ function saringCari(){
   if(!q){ info.textContent=""; info.className="cari-info"; return; }
   let nTek=0, nOut=0;
   box.querySelectorAll(".route").forEach(function(c){
-    const r=ROUTES[+c.dataset.ri]; if(!r) return;
+    const r=c.dataset.nonaktif?{nama:"",seq:STOPS.filter(p=>p.nonaktif)}:ROUTES[+c.dataset.ri]; if(!r) return;
     const cocokTek=normCari(r.nama).indexOf(q)>=0;
     let ada=0;
     c.querySelectorAll("li[data-key]").forEach(function(li){
@@ -1195,6 +1208,10 @@ function klikKembali(){
         });
         return {nama:r.nama,color:r.warna||PALETTE[i%PALETTE.length],seq:seq};
       });
+      const adaKey={}; STOPS.forEach(q=>{ adaKey[q.__key]=1; });
+      (CADANGAN.stops||[]).forEach(function(q){
+        if(q.__key&&!adaKey[q.__key]) STOPS.push(Object.assign({},q,{nonaktif:true}));
+      });
       NAMA_TEK=ROUTES.map(r=>r.nama).concat(NAMA_TEK.slice(ROUTES.length));
       WARNA_TEK=ROUTES.map(r=>r.color).concat(WARNA_TEK.slice(ROUTES.length));
       if(el("nTek")) el("nTek").value=Math.min(MAKS_TEK,ROUTES.length);
@@ -1257,7 +1274,7 @@ function render(){
       ? '<div class="notice warn"><b>'+lewat.map(r=>esc(r.nama)).join(", ")+'</b> mendapat area lebih dari '+BATAS+' km karena outlet-nya terlalu tersebar untuk dibagi lebih rapat dengan jumlah teknisi ini. Area tersebut sudah dibuat memanjang searah supaya tetap satu jalur. Tambah teknisi atau longgarkan minimum WO bila ingin lebih rapat.</div>'
       : (ROUTES.length ? '<div class="notice ok">Semua area di bawah <b>'+BATAS+' km</b>.</div>' : "");
     el("msgAdapt").innerHTML = pesanArea + (T.kurang
-      ? '<div class="notice warn">Hanya <b>'+STOPS.length+' outlet</b> hari ini — di bawah minimum '+T.min+' WO. Semuanya diberikan ke satu teknisi.</div>'
+      ? '<div class="notice warn">Hanya <b>'+aktif().length+' outlet</b> hari ini — di bawah minimum '+T.min+' WO. Semuanya diberikan ke satu teknisi.</div>'
       : (T.diminta!==T.dipakai
         ? '<div class="notice ok">Dari <b>'+T.diminta+' teknisi</b> tersedia, <b>'+T.dipakai+'</b> dipakai agar tiap orang tetap memperoleh minimal <b>'+T.min+' WO</b> (terendah saat ini '+minPer+'). <b>'+(T.diminta-T.dipakai)+' teknisi</b> bebas untuk tugas lain.</div>'
         : ""));
@@ -1266,7 +1283,7 @@ function render(){
   el("stats").className = ADMIN ? "stats" : "stats satu";
   el("stats").innerHTML = ADMIN ?
 '<div class="stat"><div class="k">Total jarak</div><div class="v">'+totKm.toFixed(1)+'</div><div class="s">km, semua teknisi</div></div>'+
-    '<div class="stat"><div class="k">Outlet</div><div class="v">'+STOPS.length+'</div><div class="s">'+ROUTES.length+' rute aktif</div></div>'+
+    '<div class="stat"><div class="k">Outlet</div><div class="v">'+aktif().length+'</div><div class="s">'+ROUTES.length+' rute aktif'+(STOPS.length>aktif().length?' · '+(STOPS.length-aktif().length)+' nonaktif':'')+'</div></div>'+
     '<div class="stat"><div class="k">Hari terpanjang</div><div class="v">'+fmtDur(maxMin)+'</div><div class="s">termasuk waktu servis</div></div>'+
     '<div class="stat"><div class="k">Ketimpangan</div><div class="v">'+imbal.toFixed(0)+'%</div><div class="s">'+(imbal<20?"seimbang":imbal<40?"cukup timpang":"perlu ditinjau")+'</div></div>'
     : '<div class="stat"><div class="k">Total outlet</div><div class="v">'+STOPS.length+'</div><div class="s">'+ROUTES.filter(r=>r.stops>0).length+' teknisi</div></div>';
@@ -1274,7 +1291,7 @@ function render(){
   el("routes").innerHTML = ROUTES.map(function(r,ri){
     const E=etas(r.seq);
     const li=r.seq.map(function(p,i){
-      const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join(""):"";
+      const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join("")+'<option value="x">Nonaktifkan (tidak dikunjungi)</option>':"";
       return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
         '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+(p.urgent?'<span class="badge">URGENT</span>':'')+'</span></span>'+
         '<span class="aksi">'+tautanTitik(p,'&#9906;').replace('class="gmp-l"','class="gmp"')+
@@ -1294,7 +1311,7 @@ function render(){
       '<div class="gmrow">'+gmapsLink(r)+'</div>'+
       (ORS_AKTIF?'<div class="jalanrow"><button type="button" class="ghost jalanbtn" data-jalan="'+ri+'">Tampilkan rute jalan dari lokasi saya</button><div class="status idle hidden" id="jl'+ri+'"></div></div>':'')+
       '<ol class="stops">'+(li||'<li><span class="txt"><span class="t2">Tidak ada outlet</span></span></li>')+'</ol></div>';
-  }).join("");
+  }).join("")+kartuNonaktif();
   saringCari();
 
   if(ADMIN){
@@ -1309,7 +1326,16 @@ function render(){
       render();
     });
     el("routes").querySelectorAll("[data-move]").forEach(sel=>sel.onchange=function(){
-      const from=+sel.dataset.move, to=+sel.value, key=sel.dataset.stop;
+      const from=+sel.dataset.move, key=sel.dataset.stop;
+      if(sel.value==="x"){                         // keluarkan dari rute, simpan sebagai nonaktif
+        const idx=ROUTES[from].seq.findIndex(p=>p.__key===key);
+        if(idx<0) return;
+        const p=ROUTES[from].seq.splice(idx,1)[0];
+        p.nonaktif=true; p.dariTek=ROUTES[from].nama;
+        ROUTES[from].seq=solve(ROUTES[from].seq);
+        measure(); render(); return;
+      }
+      const to=+sel.value;
       if(from===to) return;
       const idx=ROUTES[from].seq.findIndex(p=>p.__key===key);
       if(idx<0) return;
@@ -1319,8 +1345,33 @@ function render(){
       ROUTES[to].seq=solve(ROUTES[to].seq);
       measure(); render();
     });
+    // Aktifkan lagi outlet nonaktif ke teknisi yang dipilih.
+    el("routes").querySelectorAll("[data-aktifkan]").forEach(sel=>sel.onchange=function(){
+      if(sel.value==="") return;
+      const p=STOPS.find(x=>x.__key===sel.dataset.aktifkan), r=ROUTES[+sel.value];
+      if(!p||!r) return;
+      delete p.nonaktif; delete p.dariTek;
+      r.seq.push(p); r.seq=solve(r.seq);
+      measure(); render();
+    });
   }
   gambarPeta();
+}
+
+/* ---------- outlet nonaktif (tidak dikunjungi) ---------- */
+function kartuNonaktif(){
+  if(!ADMIN) return "";
+  const mati=STOPS.filter(p=>p.nonaktif); if(!mati.length) return "";
+  const opsi='<option value="">Aktifkan ke…</option>'+ROUTES.map((o,oi)=>'<option value="'+oi+'">'+esc(o.nama)+'</option>').join("");
+  return '<div class="route nonaktif" data-nonaktif="1"><div class="rh"><i style="background:#B7BFBB"></i><span class="nm">Tidak dikunjungi</span></div>'+
+    '<div class="meta"><span><b>'+mati.length+'</b> outlet nonaktif · tidak masuk rute dan tidak ikut terbit</span></div>'+
+    '<ol class="stops">'+mati.map(function(p){
+      return '<li data-key="'+esc(p.__key)+'"><span class="no">–</span>'+
+        '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+'</span></span>'+
+        '<span class="aksi">'+tautanTitik(p,'&#9906;').replace('class="gmp-l"','class="gmp"')+
+        '<select data-aktifkan="'+esc(p.__key)+'" title="Masukkan lagi ke rute teknisi">'+opsi+'</select></span>'+
+        '<span class="rinci">'+rinciHtml(p)+(p.id&&p.id!=="URGENT"?'<span class="t2">WO '+esc(p.id)+(p.dariTek?' · sebelumnya '+esc(p.dariTek):'')+'</span>':'')+'</span></li>';
+    }).join("")+'</ol></div>';
 }
 
 /* ---------- outlet mendesak ---------- */
