@@ -104,7 +104,9 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
 .stat .s{font-size:11.5px;color:var(--muted);margin-top:1px}
 
-.routes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:16px}
+.routes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:14px;margin-top:16px}
+.route{min-width:0}
+ol.stops .t1 .pv{font-family:ui-monospace,monospace;font-weight:500;font-size:12px;color:var(--muted);margin-left:6px}
 .route{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
 .route .rh{padding:11px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:9px}
 .route .rh i{width:12px;height:12px;border-radius:3px;flex:none}
@@ -180,7 +182,7 @@ hr.pisah{border:none;border-top:1px solid var(--line-2);margin:16px 0 14px}
 ol.stops li.aktif{background:var(--accent-soft)}
 .routes.fokus .route:not(.dipilih){display:none}
 .routes.fokus .route.dipilih{grid-column:1/-1;cursor:default}
-.routes.fokus .route.dipilih ol.stops{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));padding:0}
+.routes.fokus .route.dipilih ol.stops{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));padding:0}
 .routes.fokus .route.dipilih ol.stops li{border-bottom:1px solid var(--line-2);border-right:1px solid var(--line-2);padding:8px 11px}
 .routes.fokus .route.dipilih ol.stops .t3,.routes.fokus .route.dipilih ol.stops .t4{font-size:11.5px}
 .pin.redup{opacity:.45;box-shadow:none}
@@ -263,7 +265,7 @@ ol.stops li.aktif{background:var(--accent-soft)}
             atau klik untuk pilih berkas
             <input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV">
           </div>
-          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, lat, long, Order, Description, Serial Number, MaintActivityType, Street, District, City</b>. Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
+          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, MaintActivityType, Street, District, City</b>. Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
           <div id="peta"></div>
         </div>
       </div>
@@ -408,7 +410,9 @@ const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 let ADMIN = false;          // ditentukan setelah login
-const RINCI = ["desc","serial","act","street","district","city"];
+const RINCI = ["desc","serial","act","street","district","city","partner"];
+/* Nama outlet + Partner Value, mis. "TOKO ANGGREK 6. · 9949066". */
+const namaPV = p => String(p.nama||"")+(adaIsi(p.partner)?" · "+p.partner:"");
 /* Rincian outlet: baris 1 = Description · Serial · MaintActivityType, baris 2 = Street, District, City */
 function rinci1(p){ return [p.desc,p.serial,p.act].filter(v=>adaIsi(v)); }
 const adaIsi = v => !!v && !/^(#[A-Z0-9\/!?]+|N\/?A|-)$/i.test(String(v).trim());
@@ -480,6 +484,7 @@ const angka = v => parseFloat(String(v==null?"":v).trim().replace(",","."));
    admin diingatkan dan diminta memetakan kolomnya sendiri. */
 const KOLOM = [
   {k:"nama",     label:"Customer Name (nama outlet)", anjur:true, alias:["customername","namaoutlet","namacustomer","nama","name","outlet","customer","toko"]},
+  {k:"partner",  label:"Partner Value",      anjur:true, alias:["partnervalue","partnerno","nopartner","partner","customernumber","customerno","kodecustomer","idcustomer"]},
   {k:"lat",      label:"lat",                anjur:true, alias:["lat","latitude","lintang","y"]},
   {k:"lng",      label:"long",               anjur:true, alias:["long","lng","lon","longitude","bujur","x"]},
   {k:"koor",     label:"Koordinat (lat, long dalam satu kolom)", alias:["koordinat","coordinate","coordinates","latlong","latlng","titikgps","gps","googlemaps"]},
@@ -814,7 +819,7 @@ function gambarPeta(tanpaFit){
       const warna=redup?ABU:(p.urgent?"#A8432A":r.color);
       const ic=L.divIcon({className:"",html:'<div class="pin'+(p.urgent?" urg":"")+(redup?" redup":"")+(sorot?" sorot":"")+'" style="width:26px;height:26px;background:'+warna+'">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13]});
       const m=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:sorot?1000:(redup?-500:0)}).addTo(LAYER)
-       .bindPopup('<b>'+esc(p.nama)+'</b>'+
+       .bindPopup('<b>'+esc(namaPV(p))+'</b>'+
                   (rinci1(p).length?'<br>'+esc(rinci1(p).join(" · ")):'')+
                   (rinci2(p).length?'<br><span style="color:#75857D">'+esc(rinci2(p).join(", "))+'</span>':'')+
                   '<br>'+esc(r.nama)+' · perhentian '+(i+1)+
@@ -998,7 +1003,7 @@ function render(){
     const li=r.seq.map(function(p,i){
       const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join(""):"";
       return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
-        '<span class="txt"><span class="t1">'+esc(p.nama)+(p.urgent?'<span class="badge">URGENT</span>':'')+'</span>'+
+        '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+(p.urgent?'<span class="badge">URGENT</span>':'')+'</span>'+
         rinciHtml(p)+
         (p.id&&p.id!=="URGENT"?'<span class="t2">WO '+esc(p.id)+'</span>':'')+'</span>'+
         tautanTitik(p,'&#9906;').replace('class="gmp-l"','class="gmp"')+
@@ -1122,7 +1127,7 @@ function teksWa(){
     const E=etas(r.seq);
     return "*"+r.nama+"*\n"+r.stops+" outlet\n\n"+
       r.seq.map(function(p,i){
-        let t=(i+1)+". "+p.nama+(p.urgent?" (URGENT)":"")+(p.id&&p.id!=="URGENT"?" — WO "+p.id:"");
+        let t=(i+1)+". "+namaPV(p)+(p.urgent?" (URGENT)":"")+(p.id&&p.id!=="URGENT"?" — WO "+p.id:"");
         if(rinci1(p).length) t+="\n    "+rinci1(p).join(" · ");
         if(rinci2(p).length) t+="\n    "+rinci2(p).join(", ");
         return t;
