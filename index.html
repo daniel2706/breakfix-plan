@@ -374,8 +374,8 @@ ol.stops li.aktif{background:var(--accent-soft)}
           <div class="hint" style="margin-top:6px">Sesi admin berlaku 1 hari. Kata sandi disimpan sebagai hash di Script Properties, bukan di Sheet.</div>
 
           <hr class="pisah">
-          <label for="orsKey" style="margin-bottom:8px">Rute jalan (OpenRouteService)</label>
-          <div class="field"><input type="text" id="orsKey" autocomplete="off" spellcheck="false" placeholder="Tempel kunci API di sini"></div>
+          <label for="orsKey" style="margin-bottom:8px">Kunci cadangan rute jalan (opsional)</label>
+          <div class="field"><input type="text" id="orsKey" autocomplete="off" spellcheck="false" placeholder="Kunci OpenRouteService, boleh kosong"></div>
           <button class="ghost" id="simpanOrs">Simpan kunci rute jalan</button>
           <div class="status idle" id="stOrs"></div>
           <div class="hint" style="margin-top:6px">Kunci diuji lalu disimpan di Script Properties, tidak tampil di halaman. Simpan isian kosong untuk menonaktifkan.</div>
@@ -885,7 +885,7 @@ function ruteJalan(ri,keyTujuan){
     const ke=satu?esc(tujuan[0].nama):"outlet 1–"+tujuan.length;
     infoJalan(ri,"Dari lokasi Anda ke "+ke+": <b>±"+durJalan(j.menit)+"</b> · "+j.km.toLocaleString("id-ID")+" km"+
       (!satu&&j.legs&&j.legs[0]?" (ke outlet 1: ±"+durJalan(j.legs[0].menit)+")":"")+
-      ". Perkiraan waktu mobil tanpa macet, belum termasuk waktu servis.","ok");
+      ". Perkiraan waktu motor tanpa macet, belum termasuk waktu servis.","ok");
   }).catch(function(e){ infoJalan(ri,esc((e&&e.message)||String(e)),"bad"); });
 }
 function gambarJalan(ri,me,j){
@@ -1021,8 +1021,8 @@ function tulisStatus(key){
   if(key==="ors"){
     if(s.busy){ cls="busy"; txt="Menguji kunci…"; }
     else if(s.error){ cls="bad"; txt="Gagal: "+esc(s.error); }
-    else if(s.user){ cls="ok"; txt="Rute jalan aktif. Tombol rute jalan muncul di setiap kartu teknisi."; }
-    else { cls="warn"; txt="Rute jalan belum aktif — isi kunci OpenRouteService."; }
+    else if(s.user){ cls="ok"; txt="Kunci cadangan OpenRouteService aktif."; }
+    else { cls="idle"; txt="Tidak wajib. Rute jalan memakai server OpenStreetMap (Valhalla) tanpa kunci; kunci ini hanya dipakai bila server itu sibuk."; }
     box.className="status "+cls; box.innerHTML='<i></i><span>'+txt+'</span>'; return;
   }
   if(key==="viewer"||key==="admin"){
@@ -1580,7 +1580,7 @@ function mulaiAdmin(B){
       const k=el("orsKey").value.trim();
       jalankan("ors",this,"Menguji…","apiAturORS",[KUNCI,k],function(aktif){
         STATUS.ors.user=aktif?"aktif":""; el("orsKey").value=""; tulisStatus("ors");
-        ORS_AKTIF=!!aktif; render();
+        render();
       });
     };
     el("simpanAdmin").onclick=function(){
@@ -1611,7 +1611,7 @@ function mulaiAdmin(B){
   }
   else if(B.outlet&&B.outlet.length) setStops(B.outlet,"<b>"+B.outlet.length+"</b> outlet dimuat dari Sheet.");
   else { note("warn","Tab <b>Outlet</b> masih kosong. Unggah berkas atau isi langsung di Spreadsheet."); tulisDraf("kosong"); }
-  STATUS.ors.user=B.orsAda?"aktif":"";
+  STATUS.ors.user=B.orsKey?"aktif":"";
   ["terbit","tek","viewer","admin","ors"].forEach(tulisStatus);
 }
 
