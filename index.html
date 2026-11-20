@@ -229,6 +229,7 @@ body.penonton .layout.solo #map{height:clamp(240px,44vh,520px);transition:none}
 .sheet-bg{position:absolute;inset:0;background:rgba(15,25,20,.45);animation:sheetFade .18s ease}
 .sheet-isi{position:relative;width:100%;max-width:560px;max-height:92vh;max-height:92svh;display:flex;flex-direction:column;
   background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.18);animation:sheetNaik .22s ease}
+@media(max-width:699px){.sheet-isi{max-height:70vh;max-height:70svh}}
 @media(min-width:700px){.sheet{align-items:center}.sheet-isi{border-radius:16px;max-height:86vh}}
 @keyframes sheetNaik{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
 @keyframes sheetFade{from{opacity:0}to{opacity:1}}
@@ -926,7 +927,7 @@ function gambarPeta(tanpaFit){
                   '<br>'+esc(r.nama)+' · perhentian '+(i+1)+
                   (p.id&&p.id!=="URGENT"?' · WO '+esc(p.id):'')+
                   '<br>'+tautanTitik(p,'Buka di Google Maps')+(ORS_AKTIF?' · <a href="#" data-jalan-ke="'+ri+'|'+esc(key)+'">Rute jalan ke sini</a>':''),{autoPan:true,autoPanPaddingTopLeft:[56,16],autoPanPaddingBottomRight:[16,16]});
-      if(!ADMIN){ if(m.unbindPopup) m.unbindPopup(); m.on("click",function(){ setTimeout(function(){ fokusTitik(ri,key); bukaDetail(ri,key); },0); }); }
+      if(!ADMIN){ if(m.unbindPopup) m.unbindPopup(); m.on("click",function(){ setTimeout(function(){ bukaDetail(ri,key); fokusTitik(ri,key); },0); }); }
       PENANDA[key]={m:m,lat:p.lat,lng:p.lng};
     });
   });
@@ -1196,12 +1197,25 @@ function fokusTeknisi(ri){
   if(MAP) MAP.closePopup();
   terapkanFokus(); gambarPeta();
 }
-const ZOOM_TITIK=14;   // zoom sedang: titik terlihat bersama jalan & lingkungan sekitarnya
+const ZOOM_TITIK=11;   // zoom sedang: titik terlihat bersama kawasan sekitarnya (± 40 km lebar layar HP)
 function fokusTitik(ri,key){
   FOKUS.key=key; FOKUS.dariSemua=(FOKUS.ri==null);
   terapkanFokus(); gambarPeta(true);
   const t=PENANDA[key];
-  if(t&&MAP){ MAP.setView([t.lat,t.lng],ZOOM_TITIK,{animate:false}); setTimeout(()=>t.m.openPopup(),50); }
+  if(t&&MAP){ pusatkanTitik(t); setTimeout(()=>t.m.openPopup(),50); }
+}
+/* Pusatkan titik pada zoom ZOOM_TITIK. Bila lembar detail terbuka, titik ditaruh di tengah
+   bagian peta yang masih terlihat di atas lembar, bukan di tengah peta (yang tertutup lembar). */
+function pusatkanTitik(t){
+  const ll=L.latLng(t.lat,t.lng), z=ZOOM_TITIK;
+  const sheet=el("sheet"), isi=sheet&&!sheet.classList.contains("hidden")?sheet.querySelector(".sheet-isi"):null;
+  if(!isi){ MAP.setView(ll,z,{animate:false}); return; }
+  const mr=el("map").getBoundingClientRect(), atasLembar=isi.getBoundingClientRect().top;
+  const bawahTerlihat=Math.min(mr.bottom,atasLembar);
+  const yIngin=bawahTerlihat-mr.top>80 ? (bawahTerlihat-mr.top)/2 : 40;   // posisi titik dari atas peta (px)
+  const geser=mr.height/2-yIngin;                                            // > 0 = titik naik
+  const pusat=MAP.unproject(MAP.project(ll,z).add([0,geser]),z);
+  MAP.setView(pusat,z,{animate:false});
 }
 /* Kembali satu langkah: outlet → teknisi (atau tampilan awal) → tampilan awal. */
 function kembali(){
