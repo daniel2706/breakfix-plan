@@ -82,6 +82,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .status.busy i{width:11px;height:11px;margin-top:3px;background:transparent;border:2px solid var(--accent);border-top-color:transparent;animation:putar .8s linear infinite}
 @keyframes putar{to{transform:rotate(360deg)}}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.kembali{margin-top:6px}
+.kembali button{padding-left:0}
+.kembali button.yakin{color:var(--bad);background:transparent;font-weight:600}
+#stKembali button{margin-left:6px;padding:2px 8px;font-size:12px}
 
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:16px 12px;text-align:center;
   color:var(--muted);font-size:13px;cursor:pointer;transition:.15s;background:var(--paper)}
@@ -347,6 +351,8 @@ ol.stops li.aktif{background:var(--accent-soft)}
           <div class="status idle" id="stDraf" style="margin:0 0 11px"></div>
           <button class="primary" id="terbit" style="width:100%">Terbitkan rencana ke Sheet</button>
           <div class="status idle" id="stTerbit"></div>
+          <div class="kembali hidden" id="kembaliBox"><button type="button" class="ghost" id="kembaliTerbit">↺ Kembalikan ke rencana yang sudah terbit</button></div>
+          <div class="status hidden" id="stKembali"></div>
           <div class="hint" style="margin-top:9px">Setelah diterbitkan, siapa pun yang kamu beri tautan polos akan melihat rencana ini — tanpa bisa mengubah apa pun. Menerbitkan lagi akan <b>mengganti</b> rencana sebelumnya.</div>
           <div class="btnrow" style="margin-top:11px">
             <button class="ghost" id="salinWa">Salin teks WhatsApp</button>
@@ -1068,6 +1074,70 @@ function tulisStatus(key){
   else if(s.last){ cls="ok"; txt=(key==="tek"?"Sudah tersimpan · ":"Sudah terbit · ")+jamPendek(s.last); }
   else { cls="idle"; txt = key==="tek" ? "Nama sama dengan di Sheet." : "Belum ada rencana yang diterbitkan."; }
   box.className="status "+cls; box.innerHTML='<i></i><span>'+txt+'</span>';
+  if(key==="terbit") aturKembali();
+}
+/* ---------- kembalikan ke rencana yang sudah terbit ---------- */
+let CADANGAN=null, YAKIN_TIMER=null;
+function aturKembali(){
+  const box=el("kembaliBox"), s=STATUS.terbit; if(!box) return;
+  box.classList.toggle("hidden", !(s.last && s.ver!==s.savedVer && !s.busy));
+}
+function tulisKembali(cls,html){
+  const b=el("stKembali"); if(!b) return;
+  if(!cls){ b.className="status hidden"; b.innerHTML=""; return; }
+  b.className="status "+cls; b.innerHTML='<i></i><span>'+html+'</span>';
+}
+function klikKembali(){
+  const b=el("kembaliTerbit");
+  if(!b.classList.contains("yakin")){
+    b.classList.add("yakin"); b.textContent="Ketuk sekali lagi untuk mengganti draf dengan rencana terbit";
+    clearTimeout(YAKIN_TIMER);
+    YAKIN_TIMER=setTimeout(function(){ b.classList.remove("yakin"); b.textContent="↺ Kembalikan ke rencana yang sudah terbit"; },5000);
+    return;
+  }
+  clearTimeout(YAKIN_TIMER); b.classList.remove("yakin");
+  b.disabled=true; b.textContent="Mengambil rencana terbit…";
+  panggil("apiMuatUlang",KUNCI).then(function(d){
+    const p=d&&d.rencana;
+    if(!p||!p.rute||!p.rute.length) throw new Error("Belum ada rencana yang diterbitkan.");
+    CADANGAN=bentukDraf();
+    MEMULIHKAN=true;
+    try{
+      const c=p.config||{};
+      ["mulai","servis","speed","faktor"].forEach(k=>{ if(el(k)&&c[k]!=null&&c[k]!=="") el(k).value=c[k]; });
+      STOPS=[]; let n=0;
+      ROUTES=p.rute.map(function(r,i){
+        const seq=(r.stop||[]).map(function(x){
+          const q=Object.assign({},x); delete q.eta;
+          if(!q.__key) q.__key="t"+(n++)+"_"+Math.random().toString(36).slice(2,7);
+          STOPS.push(q); return q;
+        });
+        return {nama:r.nama,color:r.warna||PALETTE[i%PALETTE.length],seq:seq};
+      });
+      NAMA_TEK=ROUTES.map(r=>r.nama).concat(NAMA_TEK.slice(ROUTES.length));
+      WARNA_TEK=ROUTES.map(r=>r.color).concat(WARNA_TEK.slice(ROUTES.length));
+      if(el("nTek")) el("nTek").value=Math.min(MAKS_TEK,ROUTES.length);
+      if(el("cnt")) el("cnt").textContent=STOPS.length+" titik";
+      gambarTek(); sinkronTeknisi(); measure(); render();
+    } finally { MEMULIHKAN=false; }
+    STATUS.terbit.last=p.diterbitkan||STATUS.terbit.last;
+    STATUS.terbit.savedVer=STATUS.terbit.ver; tulisStatus("terbit");
+    jadwalkanDraf(true);
+    tulisKembali("ok","Draf dikembalikan ke rencana terbit "+jamPendek(p.diterbitkan)+" ("+STOPS.length+" outlet)."+
+      '<button type="button" class="ghost" id="batalKembali">Batalkan</button>');
+    el("batalKembali").onclick=batalKembali;
+  }).catch(function(e){
+    tulisKembali("bad","Gagal mengembalikan: "+esc((e&&e.message)||String(e)));
+  }).finally(function(){
+    b.disabled=false; b.textContent="↺ Kembalikan ke rencana yang sudah terbit"; aturKembali();
+  });
+}
+/* Kembali ke draf sebelum pengembalian (hanya selama belum ada perubahan baru). */
+function batalKembali(){
+  if(!CADANGAN) return;
+  const d=CADANGAN; CADANGAN=null;
+  pulihkanDraf(d); jadwalkanDraf(true);
+  tulisKembali("ok","Pengembalian dibatalkan; draf sebelumnya dipakai lagi.");
 }
 function lastUpdate(ts){
   el("lede").textContent="Last update: "+(ts?jamPendek(ts):"belum ada rencana yang terbit");
@@ -1090,7 +1160,8 @@ function jalankan(key,btn,labelProses,fn,args,onOk){
 }
 
 function render(){
-  if(ADMIN){ tandai("terbit"); jadwalkanDraf(); hapusJalan(); }
+  if(ADMIN){ tandai("terbit"); jadwalkanDraf(); hapusJalan();
+    if(!MEMULIHKAN&&CADANGAN){ CADANGAN=null; tulisKembali(null); } }
   const T=teknisiEfektif();
   const totKm=ROUTES.reduce((s,r)=>s+r.km,0);
   const durs=ROUTES.filter(r=>r.stops>0).map(r=>r.menit);
@@ -1582,6 +1653,7 @@ function mulaiAdmin(B){
     el("simpanTek").onclick=function(){
       jalankan("tek",this,"Menyimpan…","apiSimpanTeknisi",[KUNCI,NAMA_TEK.slice()]);
     };
+    el("kembaliTerbit").onclick=klikKembali;
     el("terbit").onclick=function(){
       if(!ROUTES.length) return note("warn","Hitung dulu rutenya.");
       const c=cfg();
