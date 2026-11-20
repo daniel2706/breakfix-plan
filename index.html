@@ -283,7 +283,7 @@ ol.stops li.aktif{background:var(--accent-soft)}
           <div class="row">
             <div class="field">
               <label for="nTek">Teknisi tersedia</label>
-              <input type="number" id="nTek" min="1" max="8" value="3">
+              <input type="number" id="nTek" min="1" max="20" value="3">
             </div>
             <div class="field">
               <label for="minWO">Minimum WO / teknisi</label>
@@ -420,7 +420,8 @@ ol.stops li.aktif{background:var(--accent-soft)}
 (function(){
 "use strict";
 
-const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B23A5E","#4A6670"];
+const MAKS_TEK = 20;
+const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B23A5E","#4A6670","#00838F","#C27C0E","#7B1FA2","#558B2F","#1565C0","#AD1457","#37474F","#6D4C41","#0277BD","#9E9D24","#4527A0","#00695C"];
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 let ADMIN = false;          // ditentukan setelah login
@@ -752,7 +753,7 @@ function cfg(){
   };
 }
 function teknisiEfektif(){
-  const diminta=Math.max(1,Math.min(8,parseInt(el("nTek")?el("nTek").value:3)||3));
+  const diminta=Math.max(1,Math.min(MAKS_TEK,parseInt(el("nTek")?el("nTek").value:3)||3));
   const min=Math.max(1,parseInt(el("minWO")?el("minWO").value:5)||5);
   const n=STOPS.length;
   if(!n) return {dipakai:diminta,diminta:diminta,min:min,kurang:false};
@@ -1308,7 +1309,7 @@ function sinkronTeknisi(){
   NAMA_TEK=nama.concat(NAMA_TEK.slice(nama.length));
   WARNA_TEK=ROUTES.map(r=>r.color).concat(WARNA_TEK.slice(ROUTES.length));
   const n=el("nTek");
-  if(n&&(parseInt(n.value)||0)<ROUTES.length) n.value=Math.min(8,ROUTES.length);
+  if(n&&(parseInt(n.value)||0)<ROUTES.length) n.value=Math.min(MAKS_TEK,ROUTES.length);
   gambarTek();
   if(nama.some((x,i)=>x!==TEK_SHEET[i])) tandai("tek");
 }
@@ -1418,7 +1419,7 @@ function prosesLembar(l,peta){
 
 /* ---------- daftar nama teknisi ---------- */
 function gambarTek(){
-  const n=Math.max(1,Math.min(8,parseInt(el("nTek").value)||3));
+  const n=Math.max(1,Math.min(MAKS_TEK,parseInt(el("nTek").value)||3));
   let tambah=false;
   while(NAMA_TEK.length<n){ NAMA_TEK.push("Teknisi "+(NAMA_TEK.length+1)); tambah=true; }
   if(tambah) tandai("tek");
