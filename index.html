@@ -122,6 +122,10 @@ ol.stops .t1 .pv{font-family:ui-monospace,monospace;font-weight:500;font-size:12
 .jalanrow{padding:0 14px 10px;border-bottom:1px solid var(--line-2)}
 .jalanbtn{width:100%;border:1px dashed var(--line);color:var(--accent-ink);font-size:12.5px;padding:7px 10px}
 .jalanrow .status{margin-top:7px}
+.leaflet-tooltip.lbl-jalan{font-weight:700;font-size:12px;line-height:1.2;font-family:inherit;padding:3px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.15);box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;white-space:nowrap}
+.leaflet-tooltip.lbl-jalan:before{display:none}
+.leaflet-tooltip.lbl-jalan.utama{background:#1A73E8;color:#fff;border-color:#1A73E8}
+.leaflet-tooltip.lbl-jalan.alt{background:#fff;color:#2b3a45}
 ol.stops{list-style:none;margin:0;padding:6px 0}
 ol.stops li{display:flex;gap:10px;padding:7px 14px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
 ol.stops li:last-child{border-bottom:none}
@@ -880,26 +884,48 @@ function ruteJalan(ri,keyTujuan){
     const titik=[[me.lat,me.lng]].concat(tujuan.map(p=>[p.lat,p.lng]));
     return panggil("apiRuteJalan",tokenAmbil(),titik).then(j=>({me:me,j:j}));
   }).then(function(h){
-    gambarJalan(ri,h.me,h.j);
-    const j=h.j, satu=!!keyTujuan;
-    const ke=satu?esc(tujuan[0].nama):"outlet 1–"+tujuan.length;
-    infoJalan(ri,"Dari lokasi Anda ke "+ke+": <b>±"+durJalan(j.menit)+"</b> · "+j.km.toLocaleString("id-ID")+" km"+
-      (!satu&&j.legs&&j.legs[0]?" (ke outlet 1: ±"+durJalan(j.legs[0].menit)+")":"")+
-      ". Perkiraan waktu motor tanpa macet, belum termasuk waktu servis.","ok");
+    const satu=!!keyTujuan;
+    gambarJalan(ri,h.me,h.j,0);
+    JALAN.satu=satu; JALAN.ke=satu?esc(tujuan[0].nama):"outlet 1–"+tujuan.length;
+    infoRute();
   }).catch(function(e){ infoJalan(ri,esc((e&&e.message)||String(e)),"bad"); });
 }
-function gambarJalan(ri,me,j){
+const kmJalan=k=>Number(k||0).toLocaleString("id-ID")+" km";
+/* Gambar rute utama (warna teknisi, berlabel waktu) dan rute alternatif (abu-biru,
+   berlabel waktu, bisa diketuk untuk dipilih). */
+function gambarJalan(ri,me,j,pilih,tanpaFit){
   if(!MAP) return;
   if(LAPIS_JALAN){ try{ LAPIS_JALAN.remove(); }catch(e){} }
   LAPIS_JALAN=L.layerGroup().addTo(MAP);
   const warna=(ROUTES[ri]&&ROUTES[ri].color)||"#1A73E8";
-  L.polyline(j.c,{color:"#ffffff",weight:9,opacity:.95}).addTo(LAPIS_JALAN);
-  L.polyline(j.c,{color:warna,weight:5,opacity:1}).addTo(LAPIS_JALAN);
-  L.circleMarker([me.lat,me.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#1A73E8",fillOpacity:1})
+  const semua=[{c:j.c,km:j.km,menit:j.menit}].concat(j.alternatif||[]);
+  pilih=Math.min(pilih||0,semua.length-1);
+  const kotak=L.latLngBounds([[me.lat,me.lng],[me.lat,me.lng]]);
+  semua.forEach(function(r,i){
+    kotak.extend(L.latLngBounds(r.c));
+    if(i===pilih) return;
+    const g=L.polyline(r.c,{color:"#8FA8BE",weight:7,opacity:.9,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
+    g.bindTooltip(durJalan(r.menit),{permanent:true,direction:"center",className:"lbl-jalan alt",interactive:true});
+    g.on("click",function(){ gambarJalan(ri,me,j,i,true); infoRute(); });
+  });
+  const u=semua[pilih];
+  L.polyline(u.c,{color:"#ffffff",weight:11,opacity:.95,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
+  L.polyline(u.c,{color:warna,weight:6,opacity:1,bubblingMouseEvents:false}).addTo(LAPIS_JALAN)
+    .bindTooltip(durJalan(u.menit)+" · "+kmJalan(u.km),{permanent:true,direction:"center",className:"lbl-jalan utama",interactive:true});
+  L.circleMarker([me.lat,me.lng],{radius:8,color:"#ffffff",weight:3,fillColor:"#1A73E8",fillOpacity:1,bubblingMouseEvents:false})
     .addTo(LAPIS_JALAN).bindTooltip("Lokasi Anda");
-  JALAN={ri:ri};
-  const kotak=L.latLngBounds(j.c); kotak.extend([me.lat,me.lng]);
-  MAP.fitBounds(kotak.pad(.08));
+  const lama=JALAN&&JALAN.ri===ri?JALAN:{};
+  JALAN={ri:ri,me:me,j:j,pilih:pilih,jumlah:semua.length,satu:lama.satu,ke:lama.ke};
+  if(!tanpaFit) MAP.fitBounds(kotak.pad(.08));
+}
+function infoRute(){
+  const J=JALAN; if(!J) return;
+  const semua=[J.j].concat(J.j.alternatif||[]), u=semua[J.pilih]||J.j;
+  let t="Dari lokasi Anda ke "+J.ke+": <b>±"+durJalan(u.menit)+"</b> · "+kmJalan(u.km);
+  if(!J.satu&&J.j.legs&&J.j.legs[0]) t+=" (ke outlet 1: ±"+durJalan(J.j.legs[0].menit)+")";
+  if(semua.length>1) t+=". Ada "+semua.length+" pilihan rute; ketuk garis abu-abu di peta untuk memilih"+(J.pilih?" (pilihan "+(J.pilih+1)+" sedang dipakai)":"");
+  t+=". Perkiraan waktu motor tanpa macet"+(J.satu?"":", belum termasuk waktu servis")+".";
+  infoJalan(J.ri,t,"ok");
 }
 // Tombol di kartu dan tautan di popup peta (dipasang di fase capture agar tidak dianggap "ketuk untuk kembali").
 document.addEventListener("click",function(e){
