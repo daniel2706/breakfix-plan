@@ -116,6 +116,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .gmbtn{display:block;text-align:center;font-size:13px;font-weight:600;text-decoration:none;padding:8px 10px;
   border-radius:7px;background:var(--accent-soft);color:var(--accent-ink);border:1px solid transparent;transition:.12s}
 .gmbtn:hover{border-color:var(--accent)}
+.gmbagian{display:grid;gap:6px}
 ol.stops{list-style:none;margin:0;padding:6px 0}
 ol.stops li{display:flex;gap:10px;padding:7px 14px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
 ol.stops li:last-child{border-bottom:none}
@@ -883,16 +884,30 @@ function tautanTitik(p,isi){
   if(ANDROID) return '<a class="gmp-l" href="geo:0,0?q='+koor+'('+encodeURIComponent(label)+')">'+isi+'</a>';
   return '<a class="gmp-l" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+koor+'">'+isi+'</a>';
 }
+/* Rute lengkap di Google Maps. Satu tautan hanya menerima 9 titik singgah + 1 tujuan,
+   jadi rute dipecah per 10 outlet. Bagian pertama tanpa titik awal, sehingga Google Maps
+   memulai dari lokasi HP teknisi; bagian berikutnya dimulai dari outlet terakhir bagian
+   sebelumnya. */
 function gmapsLink(r){
-  if(!r.seq.length) return "";
-  const pts=r.seq.map(p=>p.lat+","+p.lng);
-  const mid=pts.slice(1,-1), pakai=mid.slice(0,9), sisa=mid.length-pakai.length;
-  const url="https://www.google.com/maps/dir/?api=1&travelmode=driving"
-    +"&origin="+encodeURIComponent(pts[0])
-    +"&destination="+encodeURIComponent(pts[pts.length-1])
-    +(pakai.length?"&waypoints="+encodeURIComponent(pakai.join("|")):"");
-  return '<a class="gmbtn" target="_blank" rel="noopener" href="'+url+'">Buka rute di Google Maps</a>'
-    +(sisa>0?'<div class="hint">Google Maps membatasi 9 titik singgah — '+sisa+' outlet terakhir tidak ikut.</div>':"");
+  const n=r.seq.length; if(!n) return "";
+  const k=p=>p.lat+","+p.lng;
+  const bagian=[];
+  for(let a=0;a<n;a+=10) bagian.push({dari:a?r.seq[a-1]:null, stops:r.seq.slice(a,a+10), awal:a+1});
+  const url=function(b){
+    const s=b.stops, mid=s.slice(0,-1).map(k);
+    return "https://www.google.com/maps/dir/?api=1&travelmode=driving"
+      +(b.dari?"&origin="+encodeURIComponent(k(b.dari)):"")
+      +"&destination="+encodeURIComponent(k(s[s.length-1]))
+      +(mid.length?"&waypoints="+encodeURIComponent(mid.join("|")):"");
+  };
+  if(bagian.length===1)
+    return '<a class="gmbtn" target="_blank" rel="noopener" href="'+url(bagian[0])+'">Buka rute di Google Maps</a>';
+  return '<div class="gmbagian">'+bagian.map(function(b,i){
+      const akhir=b.awal+b.stops.length-1;
+      return '<a class="gmbtn" target="_blank" rel="noopener" href="'+url(b)+'">Rute bagian '+(i+1)+' · outlet '+b.awal+(akhir>b.awal?'–'+akhir:'')+'</a>';
+    }).join("")+'</div>'+
+    '<div class="hint">Google Maps memuat paling banyak 10 outlet per tautan, jadi rute ini dibagi '+bagian.length+
+    ' bagian. Buka bagian berikutnya setelah tiba di outlet terakhir bagian sebelumnya.</div>';
 }
 
 /* ---------- tampilan ---------- */
