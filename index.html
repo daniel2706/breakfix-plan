@@ -644,7 +644,7 @@ function panggil(fn){
         .then(r=>{ clearTimeout(tm); if(!r.ok) throw new Error("Server tidak merespons ("+r.status+")."); return r.json(); },
               e=>{ clearTimeout(tm);
                    if(ke<maksCoba){
-                     if((fn==="apiInfo"||fn==="apiSesi")&&el("lede")) el("lede").textContent="Server lambat merespons, mencoba lagi ("+(ke+1)+"/"+maksCoba+")…";
+                     if((fn==="apiInfo"||fn==="apiSesi")&&el("lede")&&!document.body.classList.contains("penonton")) el("lede").textContent="Server lambat merespons, mencoba lagi ("+(ke+1)+"/"+maksCoba+")…";
                      return new Promise(ok=>setTimeout(ok,800)).then(()=>sekali(ke+1)).then(d=>({__langsung:d}));
                    }
                    throw new Error(e&&e.name==="AbortError"?"Server terlalu lama merespons. Coba muat ulang halaman sebentar lagi.":"Tidak dapat terhubung ke server. Periksa koneksi internet."); })
@@ -1114,7 +1114,7 @@ function gambarJalan(ri,me,j,pilih,tanpaFit){
   L.polyline(u.c,{color:"#ffffff",weight:12,opacity:.95,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
   L.polyline(u.c,{color:"#FF2D2D",weight:6,opacity:1,className:"jalan-glow",bubblingMouseEvents:false}).addTo(LAPIS_JALAN)
     .bindTooltip(durJalan(u.menit)+" · "+kmJalan(u.km),{permanent:true,direction:"center",className:"lbl-jalan utama",interactive:true});
-  L.polyline(u.c,{color:"#FFE3E3",weight:3,opacity:.95,className:"jalan-alir",interactive:false}).addTo(LAPIS_JALAN);
+  L.polyline(u.c,{color:"#FFE3E3",weight:3,opacity:.95,className:"jalan-alir",interactive:false,bubblingMouseEvents:false}).addTo(LAPIS_JALAN);
   L.marker([me.lat,me.lng],{
     icon:L.divIcon({className:"",html:'<div class="lokasi-saya"><span class="gelombang"></span><span class="gelombang g2"></span><span class="gelombang g3"></span><span class="inti"></span></div>',iconSize:[22,22],iconAnchor:[11,11]}),
     zIndexOffset:2000,keyboard:false,bubblingMouseEvents:false
@@ -1582,6 +1582,7 @@ function hentikanNavigasi(){
   document.body.classList.remove("navigasi");
   ["navAtas","navBawah","navTiba","navPusat"].forEach(id=>sembunyi(id,true));
   setTimeout(function(){ if(MAP) MAP.invalidateSize(); PETA_UK.h0=0; ukurPeta(); },60);
+  if(DATA_TERTUNDA){ const d=DATA_TERTUNDA; DATA_TERTUNDA=null; setTimeout(function(){ masuk("viewer",d.t,d.data); },120); }
 }
 function pasangNavigasi(){
   if(!el("navAtas")||el("navAtas").dataset.siap) return; el("navAtas").dataset.siap="1";
@@ -2331,8 +2332,8 @@ function masuk(peran,token,data){
   NAMA_TEK=(data.teknisi||["Teknisi 1","Teknisi 2","Teknisi 3"]).slice();
   if(MAP){ if(ADMIN) MAP.scrollWheelZoom.enable(); else MAP.scrollWheelZoom.disable(); }
   sembunyi("petunjuk",ADMIN);
-  if(ADMIN) mulaiAdmin(data);
-  else { tampilkanRencana(data.rencana); terapkanFokus(); }
+  if(ADMIN){ hapusDataPenonton(); mulaiAdmin(data); }
+  else { simpanDataPenonton(data); tampilkanRencana(data.rencana); terapkanFokus(); }
   setTimeout(()=>{ if(MAP){ MAP.invalidateSize(); gambarPeta(); } },80);
 }
 function kirimForm(btn,labelProses,fn,args,msgId){
@@ -2346,7 +2347,7 @@ function kirimForm(btn,labelProses,fn,args,msgId){
   });
 }
 function pasangLogin(){
-  el("keluar").onclick=function(){ tokenSimpan(""); kosongkan(); tampilLogin("Kamu sudah keluar.","ok"); };
+  el("keluar").onclick=function(){ tokenSimpan(""); hapusDataPenonton(); kosongkan(); tampilLogin("Kamu sudah keluar.","ok"); };
   el("loginForm").onsubmit=function(e){
     e.preventDefault();
     const u=el("lgUser").value, p=el("lgPass").value;
@@ -2471,6 +2472,8 @@ function mulaiAdmin(B){
 document.addEventListener("DOMContentLoaded",function(){
   pasangLogin(); pasangFokus(); pasangCari(); pasangDetail(); pasangNavigasi();
   if(window.BOOT) return mulai(window.BOOT);
+  // Sudah pernah login: langsung cek sesi (hemat satu panggilan server).
+  if(!window.SETUP_KEY&&tokenAmbil()) return mulaiCepat(tokenAmbil());
   // Versi GitHub Pages: info awal diambil dari API.
   el("lede").textContent="Menghubungkan…";
   panggil("apiInfo",window.SETUP_KEY||"").then(mulai).catch(function(e){
@@ -2479,6 +2482,31 @@ document.addEventListener("DOMContentLoaded",function(){
     el("lgMsg").innerHTML='<div class="notice bad" style="margin:12px 0 0">'+esc(e.message)+'</div>';
   });
 });
+/* ---------- pemuatan cepat ----------
+   Penonton: data rencana terakhir disimpan di HP. Saat halaman dibuka, rencana itu langsung
+   ditampilkan, lalu diperbarui diam-diam begitu server menjawab. */
+const SIMPAN_DATA="bfDataPenonton";
+let DATA_TERTUNDA=null;
+function simpanDataPenonton(d){ try{ localStorage.setItem(SIMPAN_DATA,JSON.stringify({pada:Date.now(),data:d})); }catch(e){} }
+function hapusDataPenonton(){ try{ localStorage.removeItem(SIMPAN_DATA); }catch(e){} }
+function bacaDataPenonton(){ try{ const c=JSON.parse(localStorage.getItem(SIMPAN_DATA)||"null"); return c&&c.data&&c.data.rencana?c:null; }catch(e){ return null; } }
+function sidikData(d){ try{ return JSON.stringify([d&&d.rencana,d&&d.teknisi]); }catch(e){ return Math.random()+""; } }
+function mulaiCepat(t){
+  const c=bacaDataPenonton();
+  let asli="";
+  if(c){ masuk("viewer",t,c.data); asli=el("lede").textContent; el("lede").textContent=asli+" · memperbarui…"; }
+  else el("lede").textContent="Memuat…";
+  panggil("apiSesi",t).then(function(r){
+    if(!c||r.peran!=="viewer") return masuk(r.peran,t,r.data);
+    if(sidikData(r.data)===sidikData(c.data)){ el("lede").textContent=asli; simpanDataPenonton(r.data); return; }
+    if(typeof NAV!=="undefined"&&NAV){ DATA_TERTUNDA={t:t,data:r.data}; el("lede").textContent=asli+" · ada pembaruan rencana"; return; }
+    masuk("viewer",t,r.data);
+  }).catch(function(e){
+    if(e&&e.message==="SESI_HABIS"){ tokenSimpan(""); hapusDataPenonton(); kosongkan(); tampilLogin("Sesi berakhir. Silakan masuk lagi.","warn"); return; }
+    if(c){ el("lede").textContent=asli+" · belum tersambung ke server (menampilkan data tersimpan)"; return; }
+    tampilLogin(esc((e&&e.message)||String(e)));
+  });
+}
 function mulai(B){
   B=B||{};
   if(B.setup){ tampilSetup(); return; }
