@@ -333,6 +333,21 @@ ol.stops li.aktif{background:var(--accent-soft)}
 .routes.fokus .route.dipilih ol.stops li{border-bottom:1px solid var(--line-2);border-right:1px solid var(--line-2);padding:8px 11px}
 .routes.fokus .route.dipilih ol.stops .t3,.routes.fokus .route.dipilih ol.stops .t4{font-size:11.5px}
 .pin.redup{opacity:.45;box-shadow:none}
+/* penonton: titik URGENT merah muda pekat terang yang berdenyut */
+body.penonton .pin.urg{position:relative;background:#FF1493!important;border-color:#fff;overflow:visible;
+  box-shadow:0 0 0 3px rgba(255,20,147,.45),0 0 14px 4px rgba(255,20,147,.75);animation:urgDenyut 1.4s ease-in-out infinite}
+body.penonton .pin.urg::before,body.penonton .pin.urg::after{content:"";position:absolute;inset:-2px;border-radius:50%;
+  border:2px solid rgba(255,20,147,.9);background:rgba(255,20,147,.25);animation:urgGelombang 2s cubic-bezier(.2,.6,.35,1) infinite;pointer-events:none;z-index:-1}
+body.penonton .pin.urg::after{animation-delay:1s}
+body.penonton .pin.urg.redup{animation:none;box-shadow:none;background:#FF7DBE!important}
+body.penonton .pin.urg.redup::before,body.penonton .pin.urg.redup::after{display:none}
+body.penonton .pin.urg.sorot{animation-name:urgDenyutSorot}
+body.penonton ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(255,20,147,.25)}
+@keyframes urgDenyut{0%,100%{transform:scale(1);box-shadow:0 0 0 3px rgba(255,20,147,.45),0 0 12px 3px rgba(255,20,147,.65)}
+  50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(255,20,147,.55),0 0 22px 8px rgba(255,20,147,.9)}}
+@keyframes urgDenyutSorot{0%,100%{transform:scale(1.35)}50%{transform:scale(1.5)}}
+@keyframes urgGelombang{0%{transform:scale(1);opacity:.95}100%{transform:scale(3.2);opacity:0}}
+@media (prefers-reduced-motion:reduce){body.penonton .pin.urg,body.penonton .pin.urg::before,body.penonton .pin.urg::after{animation:none}}
 .pin.sorot{transform:scale(1.35);box-shadow:0 0 0 5px rgba(14,107,90,.35),0 2px 6px rgba(0,0,0,.45)}
 
 /* ---- tombol tandai mendesak (admin) ---- */
@@ -992,7 +1007,7 @@ function gambarPeta(tanpaFit){
       const key=p.__key||(ri+"_"+i), sorot=FOKUS.key===key;
       const warna=redup?ABU:(p.urgent?"#A8432A":r.color);
       const ic=L.divIcon({className:"",html:'<div class="pin'+(p.urgent?" urg":"")+(redup?" redup":"")+(sorot?" sorot":"")+'" style="width:26px;height:26px;background:'+warna+'">'+(i+1)+'</div>',iconSize:[26,26],iconAnchor:[13,13]});
-      const m=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:sorot?1000:(redup?-500:0)}).addTo(LAYER)
+      const m=L.marker([p.lat,p.lng],{icon:ic,zIndexOffset:sorot?1000:(redup?-500:(p.urgent?600:0))}).addTo(LAYER)
        .bindPopup('<b>'+esc(namaPV(p))+'</b>'+
                   (rinci1(p).length?'<br>'+esc(rinci1(p).join(" · ")):'')+
                   (rinci2(p).length?'<br><span style="color:#75857D">'+esc(rinci2(p).join(", "))+'</span>':'')+
@@ -1831,7 +1846,7 @@ function render(){
     const E=etas(r.seq);
     const li=r.seq.map(function(p,i){
       const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join("")+'<option value="x">Nonaktifkan (tidak dikunjungi)</option>':"";
-      return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
+      return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no'+(p.urgent?' no-urg':'')+'" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
         '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+(p.urgent?'<span class="badge">URGENT</span>':'')+'</span></span>'+
         '<span class="aksi">'+tautanTitik(p,'&#9906;').replace('class="gmp-l"','class="gmp"')+
         (ADMIN?'<button type="button" class="tandai'+(p.urgent?' on':'')+'" data-tandai="'+ri+'" data-stop="'+esc(p.__key)+'" title="'+(p.urgent?'Hapus tanda urgent':'Tandai urgent — tampil merah bagi penonton')+'" aria-pressed="'+(p.urgent?'true':'false')+'">!</button>'+
