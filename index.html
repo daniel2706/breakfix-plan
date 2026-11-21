@@ -633,12 +633,24 @@ function panggil(fn){
     throw e;
   };
   if(window.API_URL){
-    return fetch(window.API_URL,{method:"POST",redirect:"follow",
-        headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn:fn,args:args})})
-      .then(r=>{ if(!r.ok) throw new Error("Server tidak merespons ("+r.status+")."); return r.json(); },
-            ()=>{ throw new Error("Tidak dapat terhubung ke server. Periksa koneksi internet."); })
-      .then(function(j){ if(!j||!j.ok) throw new Error((j&&j.error)||"Respons server tidak sah."); return j.data; })
-      .catch(habis);
+    // Panggilan baca boleh diulang: bila server (Apps Script) lambat/menggantung, coba lagi otomatis.
+    const baca=/^(apiInfo|apiSesi|apiMuatUlang)$/.test(fn);
+    const batas=baca?20000:(fn==="apiRuteJalan"?60000:120000), maksCoba=baca?3:1;
+    const sekali=function(ke){
+      const ctl=window.AbortController?new AbortController():null;
+      const tm=setTimeout(function(){ if(ctl) ctl.abort(); },batas);
+      return fetch(window.API_URL,{method:"POST",redirect:"follow",signal:ctl?ctl.signal:undefined,
+          headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn:fn,args:args})})
+        .then(r=>{ clearTimeout(tm); if(!r.ok) throw new Error("Server tidak merespons ("+r.status+")."); return r.json(); },
+              e=>{ clearTimeout(tm);
+                   if(ke<maksCoba){
+                     if((fn==="apiInfo"||fn==="apiSesi")&&el("lede")) el("lede").textContent="Server lambat merespons, mencoba lagi ("+(ke+1)+"/"+maksCoba+")…";
+                     return new Promise(ok=>setTimeout(ok,800)).then(()=>sekali(ke+1)).then(d=>({__langsung:d}));
+                   }
+                   throw new Error(e&&e.name==="AbortError"?"Server terlalu lama merespons. Coba muat ulang halaman sebentar lagi.":"Tidak dapat terhubung ke server. Periksa koneksi internet."); })
+        .then(function(j){ if(j&&j.__langsung!==undefined) return j.__langsung; if(!j||!j.ok) throw new Error((j&&j.error)||"Respons server tidak sah."); return j.data; });
+    };
+    return sekali(1).catch(habis);
   }
   return new Promise(function(res,rej){
     google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,args);
