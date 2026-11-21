@@ -283,6 +283,7 @@ body.penonton .layout.solo #map{height:clamp(240px,44vh,520px);transition:none}
 }
 .mat{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;background:#E3EEFB;color:#1D4F91;vertical-align:1px;white-space:nowrap;font-family:inherit;letter-spacing:.01em}
 .sheet-bd dd .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+.sheet-bd dd .mat-ur{display:block;margin-top:3px;font-size:12.5px;color:var(--muted)}
 .sheet-bd dd .mat{margin-left:6px;font-size:12px}
 .sheet-bd dd.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
 .sheet-aksi{display:grid;gap:8px;margin-top:16px}
@@ -441,7 +442,7 @@ ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(25
             <input type="file" id="fileRinci" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV untuk memperbarui rincian outlet">
           </div>
           <div class="hint hidden" id="rinciSajaHint">Mencocokkan nomor WO (Order) dengan rencana sekarang lalu mengisi ulang rincian seperti STATUS-2, deskripsi, alamat, dan Partner Value. Urutan dan pembagian rute tidak berubah.</div>
-          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, Material, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
+          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, Material Description, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
           <div id="peta"></div>
         </div>
       </div>
@@ -608,12 +609,14 @@ const RINCI = ["desc","serial","act","street","district","city","partner","catat
 /* Nama outlet + Partner Value, mis. "TOKO ANGGREK 6. · 9949066". */
 const namaPV = p => String(p.nama||"")+(adaIsi(p.partner)?" · "+p.partner:"");
 /* Rincian outlet: baris 1 = Description · Serial · MaintActivityType, baris 2 = Street, District, City */
+/* "M650-FRIGOREX 1DR FV650" → kode "M650" + uraian "FRIGOREX 1DR FV650". */
+function kodeMaterial(v){ const t=String(v||"").trim(), m=t.match(/^([A-Za-z]{1,3}\d{2,5}[A-Za-z]?)\s*[-–:]?\s*(.*)$/); return m?{kode:m[1].toUpperCase(),uraian:m[2]}:{kode:t,uraian:""}; }
 function rinci1(p){ return [p.desc,p.serial,p.material,p.act].filter(v=>adaIsi(v)); }
 const adaIsi = v => !!v && !/^(#[A-Z0-9\/!?]+|N\/?A|-)$/i.test(String(v).trim());
 function rinci2(p){ return [p.street,p.district,p.city].filter(adaIsi); }
 function rinciHtml(p){
   const a=rinci1(p), b=rinci2(p); let h="";
-  if(a.length) h+='<span class="t3">'+[adaIsi(p.desc)?esc(p.desc):"",adaIsi(p.serial)||adaIsi(p.material)?(adaIsi(p.serial)?'<b>'+esc(p.serial)+'</b>':'')+(adaIsi(p.material)?(adaIsi(p.serial)?' ':'')+'<span class="mat">'+esc(p.material)+'</span>':''):"",adaIsi(p.act)?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
+  if(a.length) h+='<span class="t3">'+[adaIsi(p.desc)?esc(p.desc):"",adaIsi(p.serial)||adaIsi(p.material)?(adaIsi(p.serial)?'<b>'+esc(p.serial)+'</b>':'')+(adaIsi(p.material)?(adaIsi(p.serial)?' ':'')+'<span class="mat" title="'+esc(p.material)+'">'+esc(kodeMaterial(p.material).kode)+'</span>':''):"",adaIsi(p.act)?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
   if(b.length) h+='<span class="t4">'+esc(b.join(", "))+'</span>';
   return h;
 }
@@ -701,7 +704,7 @@ const KOLOM = [
   {k:"street",   label:"Street",             anjur:true, alias:["street","jalan","alamat","address"]},
   {k:"district", label:"District",           anjur:true, alias:["district","kecamatan","kelurahan","kec","kel"]},
   {k:"city",     label:"City",               anjur:true, alias:["city","kota","kabupaten"]},
-  {k:"material", label:"Material (kode aset, mis. M650)", alias:["material","materialno","materialnumber","materialcode","kodematerial","nomaterial"], kecuali:["desc","alias"]},
+  {k:"material", label:"Material Description (tipe aset, mis. M650-FRIGOREX…)", alias:["materialdescription","material","materialno","materialnumber","materialcode","kodematerial","nomaterial","tipegdm","tipeaset"], kecuali:["alias"]},
   {k:"catatan",  label:"STATUS-2 (catatan WO)", alias:["status2","catatanwo","catatan","notes","remarks","remark"]},
   {k:"servis",   label:"Durasi servis (menit)", alias:["durasi","servis","service","menit","duration"]}
 ];
@@ -709,7 +712,7 @@ let ALIAS = {};   // pola kolom yang pernah dipetakan manual: {judulTernormalisa
 
 function petakanKolom(head){
   const h=head.map(norm), peta={}, dipakai=new Set();
-  h.forEach(function(x,i){ const k=ALIAS[x]; if(k==='material'&&/desc|alias/.test(x)) return; if(k&&peta[k]==null&&!dipakai.has(i)){ peta[k]=i; dipakai.add(i); } });
+  h.forEach(function(x,i){ const k=ALIAS[x]; if(k==='material'&&/alias/.test(x)) return; if(k&&peta[k]==null&&!dipakai.has(i)){ peta[k]=i; dipakai.add(i); } });
   [1,2].forEach(function(tahap){
     KOLOM.forEach(function(f){
       if(peta[f.k]!=null) return;
@@ -1273,7 +1276,7 @@ function bukaDetail(ri,key){
   el("sheetBd").innerHTML='<dl>'+baris.map(b=>b[2]===2
     ? '<dt>'+b[0]+'</dt><dd class="catatan">'+teksCatatan(b[1])+'</dd>'
     : b[2]===3
-    ? '<dt>'+b[0]+'</dt><dd><span class="mono">'+(adaIsi(p.serial)?esc(p.serial):'')+'</span>'+(adaIsi(p.material)?' <span class="mat">'+esc(p.material)+'</span>':'')+'</dd>'
+    ? '<dt>'+b[0]+'</dt><dd><span class="mono">'+(adaIsi(p.serial)?esc(p.serial):'')+'</span>'+(adaIsi(p.material)?' <span class="mat">'+esc(kodeMaterial(p.material).kode)+'</span>'+(kodeMaterial(p.material).uraian?'<span class="mat-ur">'+esc(kodeMaterial(p.material).uraian)+'</span>':''):'')+'</dd>'
     : '<dt>'+b[0]+'</dt><dd'+(b[2]?' class="mono"':'')+'>'+esc(b[1])+'</dd>').join("")+'</dl>'+
     '<div class="sheet-aksi">'+
       (ORS_AKTIF?'<button type="button" class="utama" id="sheetRute">Tampilkan rute jalan dari lokasi saya</button>':'')+
