@@ -629,6 +629,7 @@ const warnaTek = i => WARNA_TEK[i] || PALETTE[i%PALETTE.length];
 /* ---------- jembatan ke server ---------- */
 /* Dua mode: di Apps Script memakai google.script.run; di bf.cokesoe.com
    (GitHub Pages) memanggil API JSON lewat fetch ke window.API_URL. */
+let WAKTU_MUAT=null;   // lama pemuatan terakhir (untuk diagnosis kecepatan)
 function panggil(fn){
   const args=[].slice.call(arguments,1);
   const habis=function(e){
@@ -638,8 +639,9 @@ function panggil(fn){
   if(window.API_URL){
     // Panggilan baca boleh diulang: bila server (Apps Script) lambat/menggantung, coba lagi otomatis.
     const baca=/^(apiInfo|apiSesi|apiMuatUlang)$/.test(fn);
-    const batas=baca?20000:(fn==="apiRuteJalan"?60000:120000), maksCoba=baca?3:1;
+    const batas=fn==="apiInfo"?20000:(baca?60000:(fn==="apiRuteJalan"?60000:120000)), maksCoba=baca?3:1;
     const sekali=function(ke){
+      const t0=performance.now();
       const ctl=window.AbortController?new AbortController():null;
       const tm=setTimeout(function(){ if(ctl) ctl.abort(); },batas);
       return fetch(window.API_URL,{method:"POST",redirect:"follow",signal:ctl?ctl.signal:undefined,
@@ -651,7 +653,12 @@ function panggil(fn){
                      return new Promise(ok=>setTimeout(ok,800)).then(()=>sekali(ke+1)).then(d=>({__langsung:d}));
                    }
                    throw new Error(e&&e.name==="AbortError"?"Server terlalu lama merespons. Coba muat ulang halaman sebentar lagi.":"Tidak dapat terhubung ke server. Periksa koneksi internet."); })
-        .then(function(j){ if(j&&j.__langsung!==undefined) return j.__langsung; if(!j||!j.ok) throw new Error((j&&j.error)||"Respons server tidak sah."); return j.data; });
+        .then(function(j){ if(j&&j.__langsung!==undefined) return j.__langsung;
+          if(j&&(fn==="apiSesi"||fn==="apiLogin"||fn==="apiMuatUlang")){
+            WAKTU_MUAT={fn:fn,total:Math.round(performance.now()-t0),server:j.ms,rinci:j.data&&j.data.data&&j.data.data._t||j.data&&j.data._t||null};
+            try{ console.info("[Breakfix] "+fn+": total "+WAKTU_MUAT.total+" ms, server "+j.ms+" ms",WAKTU_MUAT.rinci||""); }catch(e){}
+          }
+          if(!j||!j.ok) throw new Error((j&&j.error)||"Respons server tidak sah."); return j.data; });
     };
     return sekali(1).catch(habis);
   }
@@ -2338,6 +2345,14 @@ function masuk(peran,token,data){
   if(ADMIN){ hapusDataPenonton(); mulaiAdmin(data); }
   else { simpanDataPenonton(data); tampilkanRencana(data.rencana); terapkanFokus(); }
   setTimeout(()=>{ if(MAP){ MAP.invalidateSize(); gambarPeta(); } },80);
+  if(ADMIN&&WAKTU_MUAT) setTimeout(tulisWaktuMuat,150);
+}
+function tulisWaktuMuat(){
+  const w=WAKTU_MUAT; if(!w||!el("lede")) return;
+  const dt=x=>(x/1000).toFixed(1).replace(".",",")+" dtk";
+  const r=w.rinci?Object.keys(w.rinci).map(k=>k+" "+dt(w.rinci[k])).join(", "):"";
+  el("lede").title="Dimuat "+dt(w.total)+(w.server!=null?"; proses server "+dt(w.server):"")+(r?" ("+r+")":"");
+  if(!/ · dimuat /.test(el("lede").textContent)) el("lede").textContent+=" · dimuat "+dt(w.total)+(w.server!=null?" (server "+dt(w.server)+")":"");
 }
 function kirimForm(btn,labelProses,fn,args,msgId){
   const asli=btn.textContent; btn.disabled=true; btn.textContent=labelProses; el(msgId).innerHTML="";
