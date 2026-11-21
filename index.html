@@ -333,28 +333,29 @@ ol.stops li.aktif{background:var(--accent-soft)}
 .routes.fokus .route.dipilih ol.stops li{border-bottom:1px solid var(--line-2);border-right:1px solid var(--line-2);padding:8px 11px}
 .routes.fokus .route.dipilih ol.stops .t3,.routes.fokus .route.dipilih ol.stops .t4{font-size:11.5px}
 .pin.redup{opacity:.45;box-shadow:none}
-/* penonton: titik URGENT merah muda pekat terang yang berdenyut */
-body.penonton .pin.urg{position:relative;background:#FF1493!important;border-color:#fff;overflow:visible;
+/* titik URGENT (admin & penonton): merah muda pekat terang yang berdenyut */
+.pin.urg{position:relative;background:#FF1493!important;border-color:#fff;overflow:visible;
   box-shadow:0 0 0 3px rgba(255,20,147,.45),0 0 14px 4px rgba(255,20,147,.75);animation:urgDenyut 1.4s ease-in-out infinite}
-body.penonton .pin.urg::before,body.penonton .pin.urg::after{content:"";position:absolute;inset:-2px;border-radius:50%;
+.pin.urg::before,.pin.urg::after{content:"";position:absolute;inset:-2px;border-radius:50%;
   border:2px solid rgba(255,20,147,.9);background:rgba(255,20,147,.25);animation:urgGelombang 2s cubic-bezier(.2,.6,.35,1) infinite;pointer-events:none;z-index:-1}
-body.penonton .pin.urg::after{animation-delay:1s}
+.pin.urg::after{animation-delay:1s}
 body.penonton .pin.urg.redup{animation:none;box-shadow:none;background:#FF7DBE!important}
 body.penonton .pin.urg.redup::before,body.penonton .pin.urg.redup::after{display:none}
-body.penonton .pin.urg.sorot{animation-name:urgDenyutSorot}
-body.penonton ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(255,20,147,.25)}
+.pin.urg.sorot{animation-name:urgDenyutSorot}
+.badge.urg{background:#FFE0F0;color:#D1007A}
+ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(255,20,147,.25)}
 @keyframes urgDenyut{0%,100%{transform:scale(1);box-shadow:0 0 0 3px rgba(255,20,147,.45),0 0 12px 3px rgba(255,20,147,.65)}
   50%{transform:scale(1.12);box-shadow:0 0 0 5px rgba(255,20,147,.55),0 0 22px 8px rgba(255,20,147,.9)}}
 @keyframes urgDenyutSorot{0%,100%{transform:scale(1.35)}50%{transform:scale(1.5)}}
 @keyframes urgGelombang{0%{transform:scale(1);opacity:.95}100%{transform:scale(3.2);opacity:0}}
-@media (prefers-reduced-motion:reduce){body.penonton .pin.urg,body.penonton .pin.urg::before,body.penonton .pin.urg::after{animation:none}}
+@media (prefers-reduced-motion:reduce){.pin.urg,.pin.urg::before,.pin.urg::after{animation:none}}
 .pin.sorot{transform:scale(1.35);box-shadow:0 0 0 5px rgba(14,107,90,.35),0 2px 6px rgba(0,0,0,.45)}
 
 /* ---- tombol tandai mendesak (admin) ---- */
 .tandai{width:24px;height:24px;padding:0;border-radius:50%;flex:none;font-weight:800;font-size:13px;line-height:1;
   color:var(--muted);background:transparent;border:1.5px solid var(--line);display:inline-grid;place-items:center}
 .tandai:hover{border-color:var(--bad);color:var(--bad)}
-.tandai.on{background:var(--bad);border-color:var(--bad);color:#fff}
+.tandai.on{background:#FF1493;border-color:#FF1493;color:#fff;box-shadow:0 0 0 3px rgba(255,20,147,.25)}
 .tandai.on:hover{filter:brightness(1.1);color:#fff}
 .tandai.contoh{width:18px;height:18px;font-size:11px;vertical-align:-3px;cursor:default}
 </style>
@@ -453,7 +454,7 @@ body.penonton ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0
           </div>
           <div class="hint" style="margin-top:-6px;margin-bottom:12px">Teknisi tersedia adalah batas atas. Bila outlet tidak cukup untuk memenuhi minimum bagi semua, jumlah yang dipakai otomatis dikurangi.</div>
           <label>Nama dan warna rute teknisi</label>
-          <div class="hint" style="margin:-2px 0 8px">Ketuk kotak warna untuk mengganti warna rute di peta. Hindari merah, karena sudah dipakai untuk tanda URGENT.</div>
+          <div class="hint" style="margin:-2px 0 8px">Ketuk kotak warna untuk mengganti warna rute di peta. Hindari merah muda, karena sudah dipakai untuk tanda URGENT.</div>
           <div class="tek-list" id="tekList"></div>
           <div class="btnrow" style="margin-top:9px">
             <button class="ghost" id="simpanTek">Simpan nama ke Sheet</button>
@@ -498,7 +499,7 @@ body.penonton ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0
           <div class="hint" style="margin-top:-6px;margin-bottom:11px">Isi waktu sekarang agar outlet hanya disisipkan pada perhentian yang belum dilewati.</div>
           <button class="primary" id="uCari" style="width:100%">Cari teknisi terdekat</button>
           <div id="uHasil"></div>
-          <div class="hint" style="margin-top:11px">Outlet yang sudah ada di rute juga bisa ditandai urgent: tekan tombol <span class="tandai on contoh">!</span> di baris outletnya. Titik itu tampil <b>merah</b> dengan label URGENT bagi penonton setelah diterbitkan. Tekan lagi untuk menghapus tanda.</div>
+          <div class="hint" style="margin-top:11px">Outlet yang sudah ada di rute juga bisa ditandai urgent: tekan tombol <span class="tandai on contoh">!</span> di baris outletnya. Titik itu tampil <b>merah muda berdenyut</b> dengan label URGENT, dan setelah diterbitkan juga begitu bagi penonton. Tekan lagi untuk menghapus tanda.</div>
         </div>
       </div>
 
@@ -592,7 +593,7 @@ body.penonton ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0
 "use strict";
 
 const MAKS_TEK = 20;
-const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B23A5E","#4A6670","#00838F","#C27C0E","#7B1FA2","#558B2F","#1565C0","#AD1457","#37474F","#6D4C41","#0277BD","#9E9D24","#4527A0","#00695C"];
+const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B23A5E","#4A6670","#00838F","#C27C0E","#7B1FA2","#558B2F","#1565C0","#283593","#37474F","#6D4C41","#0277BD","#9E9D24","#4527A0","#00695C"];
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 let ADMIN = false;          // ditentukan setelah login
@@ -1234,7 +1235,7 @@ function bukaDetail(ri,key){
   SHEET_DATA={ri:ri,key:key};
   el("sheetJudul").innerHTML='<div class="nmo">'+esc(p.nama||"Outlet")+'</div>'+
     '<div class="sub"><i style="background:'+(p.urgent?"var(--bad)":r.color)+'"></i>'+esc(r.nama)+' · perhentian '+(i+1)+' dari '+r.seq.length+
-    (p.urgent?' <span class="badge">URGENT</span>':'')+'</div>';
+    (p.urgent?' <span class="badge urg">URGENT</span>':'')+'</div>';
   const baris=[
     ["Work Order",p.id&&p.id!=="URGENT"?p.id:"",1],
     ["Partner Value",p.partner,1],
@@ -1847,9 +1848,9 @@ function render(){
     const li=r.seq.map(function(p,i){
       const opts=ADMIN?ROUTES.map((o,oi)=>'<option value="'+oi+'"'+(oi===ri?' selected':'')+'>'+esc(o.nama)+'</option>').join("")+'<option value="x">Nonaktifkan (tidak dikunjungi)</option>':"";
       return '<li data-ri="'+ri+'" data-key="'+esc(p.__key||(ri+"_"+i))+'"><span class="no'+(p.urgent?' no-urg':'')+'" style="background:'+(p.urgent?"var(--bad)":r.color)+'">'+(i+1)+'</span>'+
-        '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+(p.urgent?'<span class="badge">URGENT</span>':'')+'</span></span>'+
+        '<span class="txt"><span class="t1">'+esc(p.nama)+(adaIsi(p.partner)?'<span class="pv">'+esc(p.partner)+'</span>':'')+(p.urgent?'<span class="badge urg">URGENT</span>':'')+'</span></span>'+
         '<span class="aksi">'+tautanTitik(p,'&#9906;').replace('class="gmp-l"','class="gmp"')+
-        (ADMIN?'<button type="button" class="tandai'+(p.urgent?' on':'')+'" data-tandai="'+ri+'" data-stop="'+esc(p.__key)+'" title="'+(p.urgent?'Hapus tanda urgent':'Tandai urgent — tampil merah bagi penonton')+'" aria-pressed="'+(p.urgent?'true':'false')+'">!</button>'+
+        (ADMIN?'<button type="button" class="tandai'+(p.urgent?' on':'')+'" data-tandai="'+ri+'" data-stop="'+esc(p.__key)+'" title="'+(p.urgent?'Hapus tanda urgent':'Tandai urgent — tampil merah muda berdenyut')+'" aria-pressed="'+(p.urgent?'true':'false')+'">!</button>'+
           '<select data-move="'+ri+'" data-stop="'+esc(p.__key)+'">'+opts+'</select>':'')+'</span>'+
         '<span class="rinci">'+rinciHtml(p)+
         (p.id&&p.id!=="URGENT"?'<span class="t2">WO '+esc(p.id)+'</span>':'')+'</span>'+
