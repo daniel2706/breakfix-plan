@@ -277,6 +277,13 @@ body.penonton .layout.solo #map{height:clamp(240px,44vh,520px);transition:none}
 .sheet-bd dt:last-of-type,.sheet-bd dd.catatan{border-bottom:none}
 .sheet-bd dd.catatan{grid-column:1/-1;padding-top:2px;white-space:pre-wrap;line-height:1.5;font-size:13.5px;color:var(--ink-2)}
 .sheet-bd dd.catatan a{color:var(--accent);font-weight:600}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .mat{background:#1E3350;color:#A9CBF7}
+  :root:not([data-theme="light"]) .badge.urg{background:#4A1530;color:#FF8CC6}
+}
+.mat{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;background:#E3EEFB;color:#1D4F91;vertical-align:1px;white-space:nowrap;font-family:inherit;letter-spacing:.01em}
+.sheet-bd dd .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
+.sheet-bd dd .mat{margin-left:6px;font-size:12px}
 .sheet-bd dd.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13.5px}
 .sheet-aksi{display:grid;gap:8px;margin-top:16px}
 .sheet-aksi a,.sheet-aksi button{display:block;text-align:center;padding:11px 12px;border-radius:9px;font-weight:600;font-size:14px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
@@ -434,7 +441,7 @@ ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(25
             <input type="file" id="fileRinci" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV untuk memperbarui rincian outlet">
           </div>
           <div class="hint hidden" id="rinciSajaHint">Mencocokkan nomor WO (Order) dengan rencana sekarang lalu mengisi ulang rincian seperti STATUS-2, deskripsi, alamat, dan Partner Value. Urutan dan pembagian rute tidak berubah.</div>
-          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
+          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, Material Desc Alias, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
           <div id="peta"></div>
         </div>
       </div>
@@ -597,16 +604,16 @@ const PALETTE = ["#0E6B5A","#B2593A","#3E5C9A","#8A5A14","#6B4E8E","#2E7D32","#B
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 let ADMIN = false;          // ditentukan setelah login
-const RINCI = ["desc","serial","act","street","district","city","partner","catatan"];
+const RINCI = ["desc","serial","act","street","district","city","partner","catatan","material"];
 /* Nama outlet + Partner Value, mis. "TOKO ANGGREK 6. · 9949066". */
 const namaPV = p => String(p.nama||"")+(adaIsi(p.partner)?" · "+p.partner:"");
 /* Rincian outlet: baris 1 = Description · Serial · MaintActivityType, baris 2 = Street, District, City */
-function rinci1(p){ return [p.desc,p.serial,p.act].filter(v=>adaIsi(v)); }
+function rinci1(p){ return [p.desc,p.serial,p.material,p.act].filter(v=>adaIsi(v)); }
 const adaIsi = v => !!v && !/^(#[A-Z0-9\/!?]+|N\/?A|-)$/i.test(String(v).trim());
 function rinci2(p){ return [p.street,p.district,p.city].filter(adaIsi); }
 function rinciHtml(p){
   const a=rinci1(p), b=rinci2(p); let h="";
-  if(a.length) h+='<span class="t3">'+[adaIsi(p.desc)?esc(p.desc):"",adaIsi(p.serial)?'<b>'+esc(p.serial)+'</b>':"",adaIsi(p.act)?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
+  if(a.length) h+='<span class="t3">'+[adaIsi(p.desc)?esc(p.desc):"",adaIsi(p.serial)||adaIsi(p.material)?(adaIsi(p.serial)?'<b>'+esc(p.serial)+'</b>':'')+(adaIsi(p.material)?(adaIsi(p.serial)?' ':'')+'<span class="mat">'+esc(p.material)+'</span>':''):"",adaIsi(p.act)?'<span class="act">'+esc(p.act)+'</span>':""].filter(Boolean).join(" · ")+'</span>';
   if(b.length) h+='<span class="t4">'+esc(b.join(", "))+'</span>';
   return h;
 }
@@ -682,6 +689,7 @@ const KOLOM = [
   {k:"street",   label:"Street",             anjur:true, alias:["street","jalan","alamat","address"]},
   {k:"district", label:"District",           anjur:true, alias:["district","kecamatan","kelurahan","kec","kel"]},
   {k:"city",     label:"City",               anjur:true, alias:["city","kota","kabupaten"]},
+  {k:"material", label:"Material Desc Alias (jenis aset)", alias:["materialdescalias","materialdescription","materialdesc","materialalias","jenisaset","material"]},
   {k:"catatan",  label:"STATUS-2 (catatan WO)", alias:["status2","catatanwo","catatan","notes","remarks","remark"]},
   {k:"servis",   label:"Durasi servis (menit)", alias:["durasi","servis","service","menit","duration"]}
 ];
@@ -1131,7 +1139,7 @@ document.addEventListener("click",function(e){
 
 /* ---------- pencarian teknisi / outlet ---------- */
 const normCari=t=>String(t==null?"":t).toLowerCase().replace(/\s+/g," ").trim();
-function teksStop(p){ return normCari([p.nama,p.partner,p.id,p.serial,p.desc,p.catatan].filter(adaIsi).join(" | ")); }
+function teksStop(p){ return normCari([p.nama,p.partner,p.id,p.serial,p.material,p.desc,p.catatan].filter(adaIsi).join(" | ")); }
 function tandaiTeks(node,q){
   // beri <mark> pada teks yang cocok (hanya simpul teks, tanpa mengubah tombol/tautan)
   const w=document.createTreeWalker(node,NodeFilter.SHOW_TEXT,null), daftar=[];
@@ -1224,8 +1232,10 @@ window.addEventListener("resize",function(){ if(!ADMIN) ukurPeta(); });
 let SHEET_DATA=null, SHEET_HIST=false;
 /* Catatan WO (STATUS-2): teks apa adanya, nomor HP Indonesia dijadikan tautan telepon. */
 function teksCatatan(t){
-  return esc(String(t)).replace(/(^|[^0-9A-Za-z])((?:\+?62|0)8\d{7,11})(?![0-9])/g,function(m,a,n){
-    return a+'<a href="tel:'+n.replace(/^\+?62/,'0')+'">'+n+'</a>';
+  return esc(String(t)).replace(/(^|[^0-9A-Za-z])((?:\+?62[ -]?|0)8\d{1,3}(?:[ -]?\d){6,10})(?![0-9])/g,function(m,a,n){
+    const angka=n.replace(/[^\d]/g,"").replace(/^62/,"0");
+    if(angka.length<10||angka.length>13) return m;
+    return a+'<a href="tel:'+angka+'">'+n+'</a>';
   });
 }
 function bukaDetail(ri,key){
@@ -1241,7 +1251,7 @@ function bukaDetail(ri,key){
     ["Partner Value",p.partner,1],
     ["Jenis aktivitas",p.act],
     ["Keluhan",p.desc],
-    ["Nomor aset",p.serial,1],
+    ["Nomor aset",adaIsi(p.serial)?p.serial:(adaIsi(p.material)?p.material:""),3],
     ["Alamat",p.street],
     ["Kecamatan",p.district],
     ["Kota",p.city],
@@ -1250,6 +1260,8 @@ function bukaDetail(ri,key){
   ].filter(b=>adaIsi(b[1]));
   el("sheetBd").innerHTML='<dl>'+baris.map(b=>b[2]===2
     ? '<dt>'+b[0]+'</dt><dd class="catatan">'+teksCatatan(b[1])+'</dd>'
+    : b[2]===3
+    ? '<dt>'+b[0]+'</dt><dd><span class="mono">'+(adaIsi(p.serial)?esc(p.serial):'')+'</span>'+(adaIsi(p.material)?' <span class="mat">'+esc(p.material)+'</span>':'')+'</dd>'
     : '<dt>'+b[0]+'</dt><dd'+(b[2]?' class="mono"':'')+'>'+esc(b[1])+'</dd>').join("")+'</dl>'+
     '<div class="sheet-aksi">'+
       (ORS_AKTIF?'<button type="button" class="utama" id="sheetRute">Tampilkan rute jalan dari lokasi saya</button>':'')+
