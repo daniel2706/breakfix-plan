@@ -441,7 +441,7 @@ ol.stops li .no.no-urg{background:#FF1493!important;box-shadow:0 0 0 3px rgba(25
             <input type="file" id="fileRinci" accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xlsb,.xls" title="Pilih berkas Excel atau CSV untuk memperbarui rincian outlet">
           </div>
           <div class="hint hidden" id="rinciSajaHint">Mencocokkan nomor WO (Order) dengan rencana sekarang lalu mengisi ulang rincian seperti STATUS-2, deskripsi, alamat, dan Partner Value. Urutan dan pembagian rute tidak berubah.</div>
-          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, Material Desc Alias, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
+          <div class="hint" style="margin-top:9px">Template: <b>Customer Name, Partner Value, lat, long, Order, Description, Serial Number, Material, MaintActivityType, Street, District, City</b>, dan <b>STATUS-2</b> (catatan WO, tampil di detail outlet). Kolom lain diabaikan. Bila formatnya berbeda, kamu akan diminta memetakan kolom — polanya diingat untuk unggahan berikutnya. Unggahan menimpa tab <b>Outlet</b>.</div>
           <div id="peta"></div>
         </div>
       </div>
@@ -689,7 +689,7 @@ const KOLOM = [
   {k:"street",   label:"Street",             anjur:true, alias:["street","jalan","alamat","address"]},
   {k:"district", label:"District",           anjur:true, alias:["district","kecamatan","kelurahan","kec","kel"]},
   {k:"city",     label:"City",               anjur:true, alias:["city","kota","kabupaten"]},
-  {k:"material", label:"Material Desc Alias (jenis aset)", alias:["materialdescalias","materialdescription","materialdesc","materialalias","jenisaset","material"]},
+  {k:"material", label:"Material (kode aset, mis. M650)", alias:["material","materialno","materialnumber","materialcode","kodematerial","nomaterial"], kecuali:["desc","alias"]},
   {k:"catatan",  label:"STATUS-2 (catatan WO)", alias:["status2","catatanwo","catatan","notes","remarks","remark"]},
   {k:"servis",   label:"Durasi servis (menit)", alias:["durasi","servis","service","menit","duration"]}
 ];
@@ -697,12 +697,12 @@ let ALIAS = {};   // pola kolom yang pernah dipetakan manual: {judulTernormalisa
 
 function petakanKolom(head){
   const h=head.map(norm), peta={}, dipakai=new Set();
-  h.forEach(function(x,i){ const k=ALIAS[x]; if(k&&peta[k]==null&&!dipakai.has(i)){ peta[k]=i; dipakai.add(i); } });
+  h.forEach(function(x,i){ const k=ALIAS[x]; if(k==='material'&&/desc|alias/.test(x)) return; if(k&&peta[k]==null&&!dipakai.has(i)){ peta[k]=i; dipakai.add(i); } });
   [1,2].forEach(function(tahap){
     KOLOM.forEach(function(f){
       if(peta[f.k]!=null) return;
       for(const a of f.alias){
-        const i=h.findIndex((x,j)=>!dipakai.has(j)&&x&&(tahap===1?x===a:(a.length>=4&&x.indexOf(a)>=0)));
+        const i=h.findIndex((x,j)=>!dipakai.has(j)&&x&&(tahap===1?x===a:(a.length>=4&&x.indexOf(a)>=0&&!(f.kecuali||[]).some(z=>x.indexOf(z)>=0))));
         if(i>=0){ peta[f.k]=i; dipakai.add(i); break; }
       }
     });
@@ -2187,7 +2187,11 @@ function perbaruiRincian(l,peta){
     const k=kunciWO(p.id), b=dariBerkas[k];
     if(!b){ tidakAda.push(p); return; }
     terpakai[k]=1; cocok++;
-    RINCI.forEach(function(f){ if(b[f]) p[f]=b[f]; });
+    RINCI.forEach(function(f){
+      if(b[f]) p[f]=b[f];
+      else if(peta[f]!=null) delete p[f];                 // kolom ada di berkas tapi sel kosong/#N/A
+      else if(f==="material") delete p[f];               // sisa label lama dari Material Desc Alias
+    });
     if(b.catatan) adaCatatan++;
   });
   const baru=Object.keys(dariBerkas).filter(k=>!terpakai[k]).length;
